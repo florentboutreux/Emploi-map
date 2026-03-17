@@ -44,8 +44,8 @@
         // =====================================================================
         // 🔑 CONFIGURATION DE L'API FRANCE TRAVAIL
         // =====================================================================
-        const DEFAULT_FT_CLIENT_ID = "PAR_cartedelemploi_2a4be1818f99be8f396a2d6b102bbd9543ab609c6501738ec9318d030d0e820d"; // Ex: "PAR_votre_projet_..."
-        const DEFAULT_FT_CLIENT_SECRET = "1c9c184fd29ddddb3a0113d40b3ff2e0723c4c9308bb7a2927c3a358743b46e4"; // Ex: "a1b2c3d4-..."
+        const DEFAULT_FT_CLIENT_ID = ""; // Ex: "PAR_votre_projet_..."
+        const DEFAULT_FT_CLIENT_SECRET = ""; // Ex: "a1b2c3d4-..."
         // =====================================================================
 
         // --- DONNÉES DE DÉMONSTRATION ENRICHIES ---
@@ -60,14 +60,10 @@
         const fetchWithRetry = async (url, options, retries = 3) => {
             try {
                 const res = await fetch(url, options);
-                // Si le quota de l'API est dépassé (429 Too Many Requests)
                 if (res.status === 429 && retries > 0) {
-                    // Lecture de l'en-tête Retry-After pour savoir combien de secondes attendre (défaut: 2s)
                     const retryAfter = parseInt(res.headers.get('Retry-After') || '2', 10);
                     console.warn(`Quota API France Travail dépassé (429). Retentative dans ${retryAfter} secondes...`);
-                    // Attente asynchrone
                     await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                    // Nouvel appel récursif
                     return fetchWithRetry(url, options, retries - 1);
                 }
                 return res;
@@ -81,24 +77,30 @@
             const [hasSearched, setHasSearched] = useState(false);
             const [jobs, setJobs] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
-            const [viewMode, setViewMode] = useState('search'); // 'search' ou 'favorites'
+            const [viewMode, setViewMode] = useState('search'); 
             
             // --- AUTO-COMPLÉTION & GÉOGRAPHIE ---
             const [addressQuery, setAddressQuery] = useState('');
             const [addressSuggestions, setAddressSuggestions] = useState([]);
             const [isSuggesting, setIsSuggesting] = useState(false);
-            const [homeLatLng, setHomeLatLng] = useState(null); // Contient aussi .cityCode (INSEE)
+            const [homeLatLng, setHomeLatLng] = useState(null); 
             
-            // --- API & PAGINATION ---
+            // --- API & PARAMETRES ---
             const [useRealApi, setUseRealApi] = useState(() => (localStorage.getItem('ft_use_real') === 'true' || DEFAULT_FT_CLIENT_ID !== ""));
-            const [useCorsProxy, setUseCorsProxy] = useState(() => localStorage.getItem('ft_use_cors_proxy') !== 'false'); // Activé par défaut pour le web
+            const [useCorsProxy, setUseCorsProxy] = useState(() => localStorage.getItem('ft_use_cors_proxy') !== 'false');
+            const [customProxyUrl, setCustomProxyUrl] = useState(() => localStorage.getItem('ft_custom_proxy_url') || 'https://corsproxy.io/?');
             const [ftClientId, setFtClientId] = useState(() => localStorage.getItem('ft_client_id') || DEFAULT_FT_CLIENT_ID);
             const [ftClientSecret, setFtClientSecret] = useState(() => localStorage.getItem('ft_client_secret') || DEFAULT_FT_CLIENT_SECRET);
+            
+            // --- ETATS TEST API ---
+            const [isTestingApi, setIsTestingApi] = useState(false);
+            const [apiTestResult, setApiTestResult] = useState('');
+
             const [page, setPage] = useState(0);
             const [hasMore, setHasMore] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
 
-            // --- FAVORIS (Sauvegarde Locale) ---
+            // --- FAVORIS ---
             const [favoriteJobs, setFavoriteJobs] = useState(() => {
                 const saved = localStorage.getItem('ft_favorites');
                 return saved ? JSON.parse(saved) : [];
@@ -108,23 +110,22 @@
             const [showFilters, setShowFilters] = useState(false);
             const [transportMode, setTransportMode] = useState('driving'); 
             const [maxDuration, setMaxDuration] = useState(45); 
-            const [maxDistance, setMaxDistance] = useState(30); // Rayon INSEE API (km)
+            const [maxDistance, setMaxDistance] = useState(30); 
             
-            const [filterContract, setFilterContract] = useState(''); // '', 'CDI', 'CDD', 'MIS' (Intérim), 'ALT'
-            const [filterExperience, setFilterExperience] = useState(''); // '1' (Débutant), '2' (1-3 ans), '3' (+3 ans)
-            const [filterTime, setFilterTime] = useState(''); // 'true' (Temps plein), 'false' (Temps partiel)
+            const [filterContract, setFilterContract] = useState(''); 
+            const [filterExperience, setFilterExperience] = useState(''); 
+            const [filterTime, setFilterTime] = useState(''); 
             const [filterRemote, setFilterRemote] = useState(false);
 
             const [jobRoutes, setJobRoutes] = useState({}); 
 
             // --- UI ---
-            const [selectedJob, setSelectedJob] = useState(null); // Pour la carte
-            const [detailedJob, setDetailedJob] = useState(null); // Pour le panneau latéral
+            const [selectedJob, setSelectedJob] = useState(null); 
+            const [detailedJob, setDetailedJob] = useState(null); 
             const [sortBy, setSortBy] = useState('duration');
             const [showSettings, setShowSettings] = useState(false);
             const [isMapLoaded, setIsMapLoaded] = useState(false);
 
-            // --- RÉFÉRENCES ---
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({});
@@ -132,7 +133,6 @@
             const routeLayerRef = useRef(null);
             const suggestionBoxRef = useRef(null);
 
-            // Sauvegarde automatique des favoris
             useEffect(() => {
                 localStorage.setItem('ft_favorites', JSON.stringify(favoriteJobs));
             }, [favoriteJobs]);
@@ -153,7 +153,6 @@
                 return baseOsrmDurationMin;
             }, []);
 
-            // Initialisation Leaflet
             useEffect(() => {
                 if (!mapRef.current || !window.L || mapInstanceRef.current) return;
                 mapInstanceRef.current = window.L.map(mapRef.current, { zoomControl: false }).setView([46.603354, 1.888334], 6);
@@ -164,10 +163,10 @@
 
             const createCustomIcon = (type, isSelected = false) => {
                 if (!window.L) return null;
-                let color = '#2563eb'; // Bleu (Offre)
-                if (type === 'home') color = '#16a34a'; // Vert
-                else if (isSelected) color = '#dc2626'; // Rouge
-                else if (type === 'favorite') color = '#ec4899'; // Rose (Favori)
+                let color = '#2563eb'; 
+                if (type === 'home') color = '#16a34a'; 
+                else if (isSelected) color = '#dc2626'; 
+                else if (type === 'favorite') color = '#ec4899'; 
 
                 const svgPath = type === 'home' 
                     ? `<circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>`
@@ -176,7 +175,6 @@
                 return window.L.divIcon({ html: `<svg viewBox="0 0 24 24" width="30" height="30" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`, className: '', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30] });
             };
 
-            // Auto-complétion Adresse (Gouv)
             useEffect(() => {
                 if (!isSuggesting || addressQuery.length < 3) { setAddressSuggestions([]); return; }
                 const timer = setTimeout(async () => {
@@ -194,7 +192,6 @@
                 setAddressSuggestions([]);
                 setIsSuggesting(false);
                 const coords = feature.geometry.coordinates;
-                // RECUPERATION DU CODE INSEE (citycode) POUR L'API FRANCE TRAVAIL
                 const latLng = { lat: coords[1], lng: coords[0], cityCode: feature.properties.citycode };
                 setHomeLatLng(latLng);
                 
@@ -204,6 +201,55 @@
                     .addTo(mapInstanceRef.current).bindPopup("<b>Votre domicile</b>").openPopup();
                 mapInstanceRef.current.setView([latLng.lat, latLng.lng], 11);
                 return latLng;
+            };
+
+            // --- FONCTION DE TEST API DÉDIÉE ---
+            const testApiConnection = async () => {
+                setIsTestingApi(true);
+                setApiTestResult('<i class="fas fa-spinner fa-spin"></i> Test en cours...');
+                try {
+                    // 1. Test Authentification
+                    let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
+                    if (useCorsProxy) tokenUrl = `${customProxyUrl}${encodeURIComponent(tokenUrl)}`;
+
+                    const tokenParams = new URLSearchParams();
+                    tokenParams.append('grant_type', 'client_credentials');
+                    tokenParams.append('client_id', ftClientId);
+                    tokenParams.append('client_secret', ftClientSecret);
+                    tokenParams.append('scope', 'api_offresdemploiv2 o2dsoffre');
+
+                    const tokenRes = await fetch(tokenUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: tokenParams.toString()
+                    });
+
+                    if (!tokenRes.ok) {
+                        const errText = await tokenRes.text();
+                        setApiTestResult(`❌ <b>Échec Auth (Code ${tokenRes.status})</b><br/>Vérifiez vos identifiants. Si 403, le Proxy est bloqué par France Travail.`);
+                        setIsTestingApi(false);
+                        return;
+                    }
+                    
+                    const tokenData = await tokenRes.json();
+                    
+                    // 2. Test Recherche
+                    let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=test&range=0-1`;
+                    let jobsUrl = useCorsProxy ? `${customProxyUrl}${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
+                    
+                    const jobsRes = await fetch(jobsUrl, {
+                        headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
+                    });
+
+                    if (!jobsRes.ok) {
+                        setApiTestResult(`❌ <b>Auth OK, mais Recherche KO (Code ${jobsRes.status})</b><br/>Le token est bon mais la requête d'offres a échoué.`);
+                    } else {
+                        setApiTestResult(`✅ <b>Succès !</b><br/>L'API France Travail communique parfaitement.`);
+                    }
+                } catch (err) {
+                    setApiTestResult(`❌ <b>Erreur Réseau/CORS</b><br/>Détail : ${err.message}<br/>Le navigateur ou France Travail bloque la requête (CORS). L'utilisation d'un Backend serveur est obligatoire en production.`);
+                }
+                setIsTestingApi(false);
             };
 
             // --- MOTEUR DE RECHERCHE PRINCIPAL ---
@@ -223,9 +269,8 @@
                 try {
                     if (useRealApi && ftClientId && ftClientSecret) {
                         try {
-                            // 1. URL d'Authentification OAuth2 (Client Credentials)
                             let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
-                            if (useCorsProxy) tokenUrl = `https://corsproxy.io/?${encodeURIComponent(tokenUrl)}`;
+                            if (useCorsProxy) tokenUrl = `${customProxyUrl}${encodeURIComponent(tokenUrl)}`;
 
                             const tokenParams = new URLSearchParams();
                             tokenParams.append('grant_type', 'client_credentials');
@@ -233,71 +278,58 @@
                             tokenParams.append('client_secret', ftClientSecret);
                             tokenParams.append('scope', 'api_offresdemploiv2 o2dsoffre');
 
-                            // Utilisation de notre fonction avec gestion des quotas (429)
                             const tokenRes = await fetchWithRetry(tokenUrl, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                                 body: tokenParams.toString()
                             });
 
-                            if (!tokenRes.ok) {
-                                throw new Error(`Erreur d'authentification: ${tokenRes.status}`);
-                            }
+                            if (!tokenRes.ok) throw new Error(`Erreur d'authentification: ${tokenRes.status}`);
                             const tokenData = await tokenRes.json();
 
-                            // 2. Construction de la requête avec Filtres et Code INSEE
                             const searchParams = new URLSearchParams();
                             if (searchQuery) searchParams.append('motsCles', searchQuery);
-                            
-                            // Paramètres avancés
                             if (filterContract) searchParams.append('typeContrat', filterContract);
                             if (filterExperience) searchParams.append('experience', filterExperience);
                             if (filterTime) searchParams.append('tempsPlein', filterTime);
                             if (filterRemote) searchParams.append('teletravailPossible', 'true');
                             
-                            // Géographie (INSEE)
                             if (currentHomeLatLng && currentHomeLatLng.cityCode) {
                                 searchParams.append('commune', currentHomeLatLng.cityCode);
-                                searchParams.append('distance', maxDistance); // API accepte généralement jusqu'à 100km
+                                searchParams.append('distance', maxDistance); 
                             }
 
-                            // Pagination (Blocs de 20)
                             const start = targetPage * 20;
                             const end = start + 19;
                             searchParams.append('range', `${start}-${end}`);
                             
                             const queryString = searchParams.toString();
                             let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search${queryString ? '?' + queryString : ''}`;
-                            let jobsUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
+                            let jobsUrl = useCorsProxy ? `${customProxyUrl}${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
                             
                             const jobsRes = await fetchWithRetry(jobsUrl, {
-                                headers: { 
-                                    Authorization: `Bearer ${tokenData.access_token}`, 
-                                    Accept: 'application/json' 
-                                }
+                                headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
                             });
 
                             if (jobsRes.status === 204) {
                                 fetchedJobs = [];
                                 setHasMore(false);
-                            } else if (!jobsRes.ok) throw new Error("Erreur serveur API lors de la récupération des offres");
+                            } else if (!jobsRes.ok) throw new Error("Erreur API Offres");
                             else {
                                 const jobsData = await jobsRes.json();
                                 fetchedJobs = jobsData.resultats || [];
-                                setHasMore(fetchedJobs.length === 20); // S'il y en a 20, il y a probablement une page suivante
+                                setHasMore(fetchedJobs.length === 20); 
                             }
                         } catch (error) {
-                            console.error("Fallback Mock suite erreur:", error);
-                            alert("Erreur de connexion à l'API France Travail.\nSi c'est une erreur CORS, assurez-vous que le proxy est activé dans les paramètres.\nL'application bascule sur les données de démonstration.");
+                            console.error("Erreur complète API France Travail:", error);
+                            alert("Connexion à l'API France Travail impossible (Erreur de sécurité CORS du navigateur ou proxy bloqué).\n\nL'application passe sur les données de démonstration pour vous permettre de tester les filtres.");
                             fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                         }
                     } else {
-                        // Utilisation du Mock si pas d'API
                         await new Promise(resolve => setTimeout(resolve, 500)); 
                         fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                     }
 
-                    // --- OSRM ROUTING (Calcul des temps pour les nouvelles offres uniquement) ---
                     if (currentHomeLatLng && fetchedJobs.length > 0) {
                         const newRoutes = { ...jobRoutes };
                         await Promise.all(fetchedJobs.map(async (job) => {
@@ -314,11 +346,10 @@
                                         distanceKm: parseFloat((data.routes[0].distance / 1000).toFixed(1))
                                     };
                                 }
-                            } catch (err) { /* Erreur silencieuse pour OSRM */ }
+                            } catch (err) {}
                         }));
                         setJobRoutes(newRoutes);
 
-                        // Filtrer par le Slider Temps Max (Application front-end post-requête API)
                         fetchedJobs = fetchedJobs.filter(job => {
                             if (!newRoutes[job.id]) return false;
                             const currentModeDur = getCalculatedDuration(newRoutes[job.id].distanceKm, newRoutes[job.id].osrmDurationMin, transportMode);
@@ -326,11 +357,8 @@
                         });
                     }
 
-                    if (isLoadMore) {
-                        setJobs(prev => [...prev, ...fetchedJobs]);
-                    } else {
-                        setJobs(fetchedJobs);
-                    }
+                    if (isLoadMore) setJobs(prev => [...prev, ...fetchedJobs]);
+                    else setJobs(fetchedJobs);
                     
                     setPage(targetPage);
                     setSelectedJob(null);
@@ -341,9 +369,8 @@
                 }
             };
 
-            // Simulation de recherche sur les Mocks
             const mockSearch = (targetPage, currentHomeLatLng) => {
-                if (targetPage > 0) { setHasMore(false); return []; } // 1 seule page de mock
+                if (targetPage > 0) { setHasMore(false); return []; } 
                 setHasMore(false);
                 return MOCK_JOBS.filter(job => 
                     (job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || job.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
@@ -353,7 +380,6 @@
                 );
             };
 
-            // Dessin du tracé sur la carte
             const calculateRouteGeometry = useCallback(async (job, origin = homeLatLng) => {
                 if (!job || !origin || !window.L || !mapInstanceRef.current || !job.lieuTravail?.latitude) return;
                 try {
@@ -379,7 +405,6 @@
                 else if (routeLayerRef.current) routeLayerRef.current.remove();
             }, [selectedJob, homeLatLng, calculateRouteGeometry]);
 
-            // Mise à jour des marqueurs carte
             useEffect(() => {
                 if (!isMapLoaded || !window.L || !mapInstanceRef.current) return;
                 Object.values(markersRef.current).forEach(marker => marker.remove());
@@ -688,47 +713,79 @@
                         </div>
                     )}
 
-                    {/* --- MODAL PARAMÈTRES --- */}
+                    {/* --- MODAL PARAMÈTRES (AVEC TESTEUR INTÉGRÉ) --- */}
                     {showSettings && (
                         <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-in-bottom">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slide-in-bottom">
                                 <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> API France Travail</h2>
+                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> Configuration & Diagnostic API</h2>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700"><i className="fas fa-times"></i></button>
                                 </div>
-                                <div className="p-5 space-y-4">
+                                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                                    
+                                    {/* Bloc Activation */}
                                     <div className="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                        <span className="text-sm font-semibold text-blue-900">Forcer l'API réelle</span>
+                                        <span className="text-sm font-semibold text-blue-900">Activer l'API France Travail</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" className="sr-only peer" checked={useRealApi} onChange={(e) => setUseRealApi(e.target.checked)}/>
                                             <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </div>
                                     
-                                    <div className={`space-y-3 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
-                                        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client ID</label><input type="text" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientId} onChange={(e) => setFtClientId(e.target.value)} placeholder="PAR_votrenom_..."/></div>
-                                        <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client Secret</label><input type="password" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientSecret} onChange={(e) => setFtClientSecret(e.target.value)} placeholder="••••••••••••"/></div>
+                                    <div className={`space-y-4 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
                                         
-                                        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-[11px] text-yellow-800 leading-tight">
-                                            <i className="fas fa-exclamation-triangle mr-1 text-yellow-600"></i><strong>Alerte de Sécurité Officielle :</strong><br/>
-                                            France Travail exige que la Clé Secrète reste côté Serveur (Backend). En production, vous devrez migrer ces requêtes vers un serveur.
+                                        {/* Identifiants */}
+                                        <div className="space-y-3">
+                                            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client ID</label><input type="text" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientId} onChange={(e) => setFtClientId(e.target.value)} placeholder="PAR_votrenom_..."/></div>
+                                            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client Secret</label><input type="password" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientSecret} onChange={(e) => setFtClientSecret(e.target.value)} placeholder="••••••••••••"/></div>
                                         </div>
-                                        
-                                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200 mt-2">
-                                            <div>
-                                                <span className="text-sm font-semibold text-gray-800 block">Utiliser un proxy CORS</span>
-                                                <span className="text-[10px] text-gray-500 block">Nécessaire pour contourner le blocage navigateur (Dév)</span>
+
+                                        {/* Option de contournement CORS */}
+                                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-sm font-bold text-gray-800 block">Proxy CORS (Développement)</span>
+                                                    <span className="text-[10px] text-gray-500 block leading-tight">France Travail bloque les requêtes directes. Un proxy tente de contourner cela.</span>
+                                                </div>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={useCorsProxy} onChange={(e) => setUseCorsProxy(e.target.checked)}/>
+                                                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gray-800"></div>
+                                                </label>
                                             </div>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" className="sr-only peer" checked={useCorsProxy} onChange={(e) => setUseCorsProxy(e.target.checked)}/>
-                                                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gray-600"></div>
-                                            </label>
+                                            {useCorsProxy && (
+                                                <div>
+                                                    <label className="block text-[10px] font-semibold text-gray-500 mb-1">URL du Proxy</label>
+                                                    <select value={customProxyUrl} onChange={(e) => setCustomProxyUrl(e.target.value)} className="w-full text-xs bg-white border border-gray-200 rounded-lg py-1.5 px-2 outline-none">
+                                                        <option value="https://corsproxy.io/?">Proxy 1 (corsproxy.io)</option>
+                                                        <option value="https://api.allorigins.win/raw?url=">Proxy 2 (allorigins.win)</option>
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Outil de Diagnostic */}
+                                        <div className="border border-indigo-100 bg-indigo-50 rounded-xl p-4">
+                                            <h3 className="text-sm font-bold text-indigo-900 mb-2"><i className="fas fa-stethoscope mr-1"></i> Outil de Diagnostic</h3>
+                                            <p className="text-[11px] text-indigo-700 mb-3 leading-tight">Cliquez ci-dessous pour tester votre Client ID et vérifier exactement où la requête est bloquée.</p>
+                                            
+                                            <button onClick={testApiConnection} disabled={isTestingApi || !ftClientId || !ftClientSecret} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-lg shadow transition disabled:opacity-50">
+                                                Lancer le test de connexion
+                                            </button>
+
+                                            {apiTestResult && (
+                                                <div className="mt-3 p-2 bg-white border border-indigo-100 rounded text-xs text-gray-700 font-mono" dangerouslySetInnerHTML={{__html: apiTestResult}}></div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-[11px] text-yellow-800 leading-tight">
+                                            <i className="fas fa-exclamation-triangle mr-1 text-yellow-600"></i><strong>À savoir pour la Production :</strong><br/>
+                                            Même avec un proxy, cette méthode reste expérimentale. Pour un site en ligne définitif, vous devrez faire la demande de token sur votre propre serveur (NodeJS/PHP).
                                         </div>
                                     </div>
                                 </div>
                                 <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
-                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition">Annuler</button>
-                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_use_cors_proxy', useCorsProxy); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
+                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition">Fermer</button>
+                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_use_cors_proxy', useCorsProxy); localStorage.setItem('ft_custom_proxy_url', customProxyUrl); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
                                 </div>
                             </div>
                         </div>
