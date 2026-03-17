@@ -208,7 +208,6 @@
                 setIsTestingApi(true);
                 setApiTestResult('<i class="fas fa-spinner fa-spin"></i> Test en cours...');
                 try {
-                    // 1. Test Authentification
                     let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
                     if (useCorsProxy) tokenUrl = `${customProxyUrl}${encodeURIComponent(tokenUrl)}`;
 
@@ -225,15 +224,27 @@
                     });
 
                     if (!tokenRes.ok) {
-                        const errText = await tokenRes.text();
-                        setApiTestResult(`❌ <b>Échec Auth (Code ${tokenRes.status})</b><br/>Vérifiez vos identifiants. Si 403, le Proxy est bloqué par France Travail.`);
+                        const status = tokenRes.status;
+                        if (status === 403) {
+                            setApiTestResult(`
+                                ❌ <b class="text-red-600">Erreur 403 (Accès Refusé)</b><br/><br/>
+                                <b>Cause 1 : Droits manquants (Très fréquent)</b><br/>
+                                Allez sur votre espace <i>francetravail.io</i> -> Votre application. Avez-vous bien cliqué sur "Souscrire à une API" et ajouté <b>Offres d'emploi v2</b> ?<br/><br/>
+                                <b>Cause 2 : Proxy bloqué</b><br/>
+                                Le pare-feu de France Travail bloque l'adresse IP du proxy public (${customProxyUrl}).<br/>
+                                <i>Solution : Essayez l'autre proxy dans la liste déroulante, ou créez votre propre serveur Backend (Node.js/PHP).</i>
+                            `);
+                        } else if (status === 400 || status === 401) {
+                            setApiTestResult(`❌ <b>Erreur ${status} (Non autorisé)</b><br/>Vos identifiants (Client ID / Secret) sont incorrects ou mal recopiés.`);
+                        } else {
+                            setApiTestResult(`❌ <b>Erreur ${status}</b><br/>Échec inattendu de l'authentification.`);
+                        }
                         setIsTestingApi(false);
                         return;
                     }
                     
                     const tokenData = await tokenRes.json();
                     
-                    // 2. Test Recherche
                     let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=test&range=0-1`;
                     let jobsUrl = useCorsProxy ? `${customProxyUrl}${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
                     
@@ -242,12 +253,22 @@
                     });
 
                     if (!jobsRes.ok) {
-                        setApiTestResult(`❌ <b>Auth OK, mais Recherche KO (Code ${jobsRes.status})</b><br/>Le token est bon mais la requête d'offres a échoué.`);
+                        if (jobsRes.status === 403) {
+                            setApiTestResult(`❌ <b>Token OK, mais Recherche 403 (Refusée)</b><br/>Vous avez un token, mais pas l'autorisation d'utiliser l'API "Offres". Vérifiez vos souscriptions sur francetravail.io.`);
+                        } else {
+                            setApiTestResult(`❌ <b>Auth OK, mais Recherche KO (Code ${jobsRes.status})</b>`);
+                        }
                     } else {
-                        setApiTestResult(`✅ <b>Succès !</b><br/>L'API France Travail communique parfaitement.`);
+                        setApiTestResult(`✅ <b>Succès !</b><br/>L'API France Travail communique parfaitement avec l'application.`);
                     }
                 } catch (err) {
-                    setApiTestResult(`❌ <b>Erreur Réseau/CORS</b><br/>Détail : ${err.message}<br/>Le navigateur ou France Travail bloque la requête (CORS). L'utilisation d'un Backend serveur est obligatoire en production.`);
+                    setApiTestResult(`
+                        ❌ <b class="text-red-600">Erreur Réseau (CORS)</b><br/><br/>
+                        <b>Détail :</b> ${err.message}<br/><br/>
+                        Le navigateur interdit d'appeler directement France Travail pour des raisons de sécurité.<br/>
+                        Si l'option Proxy est cochée et que vous avez cette erreur, c'est que le Proxy est hors-service ou bloqué. 
+                        <b>Pour une vraie application en production, un serveur Backend est obligatoire.</b>
+                    `);
                 }
                 setIsTestingApi(false);
             };
@@ -284,7 +305,7 @@
                                 body: tokenParams.toString()
                             });
 
-                            if (!tokenRes.ok) throw new Error(`Erreur d'authentification: ${tokenRes.status}`);
+                            if (!tokenRes.ok) throw new Error(`Erreur HTTP: ${tokenRes.status}`);
                             const tokenData = await tokenRes.json();
 
                             const searchParams = new URLSearchParams();
@@ -314,7 +335,7 @@
                             if (jobsRes.status === 204) {
                                 fetchedJobs = [];
                                 setHasMore(false);
-                            } else if (!jobsRes.ok) throw new Error("Erreur API Offres");
+                            } else if (!jobsRes.ok) throw new Error(`Erreur Offres: ${jobsRes.status}`);
                             else {
                                 const jobsData = await jobsRes.json();
                                 fetchedJobs = jobsData.resultats || [];
@@ -322,7 +343,12 @@
                             }
                         } catch (error) {
                             console.error("Erreur complète API France Travail:", error);
-                            alert("Connexion à l'API France Travail impossible (Erreur de sécurité CORS du navigateur ou proxy bloqué).\n\nL'application passe sur les données de démonstration pour vous permettre de tester les filtres.");
+                            // Alerte spécifique si 403
+                            if (error.message.includes('403')) {
+                                alert("⚠️ ACCÈS REFUSÉ (Erreur 403)\nFrance Travail a bloqué votre requête.\nVérifiez dans vos paramètres (icône engrenage) via l'outil de diagnostic la cause exacte (Droits manquants ou Proxy bloqué).\n\nBasculement sur les offres de démonstration.");
+                            } else {
+                                alert("⚠️ Connexion à l'API France Travail impossible.\nVérifiez l'outil de diagnostic dans les paramètres.\n\nBasculement sur les offres de démonstration.");
+                            }
                             fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                         }
                     } else {
