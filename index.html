@@ -44,8 +44,8 @@
         // =====================================================================
         // 🔑 CONFIGURATION DE L'API FRANCE TRAVAIL
         // =====================================================================
-        const DEFAULT_FT_CLIENT_ID = "PAR_cartedelemploi_2a4be1818f99be8f396a2d6b102bbd9543ab609c6501738ec9318d030d0e820d"; // Ex: "PAR_votre_projet_..."
-        const DEFAULT_FT_CLIENT_SECRET = "1c9c184fd29ddddb3a0113d40b3ff2e0723c4c9308bb7a2927c3a358743b46e4"; // Ex: "a1b2c3d4-..."
+        const DEFAULT_FT_CLIENT_ID = ""; // Ex: "PAR_votre_projet_..."
+        const DEFAULT_FT_CLIENT_SECRET = ""; // Ex: "a1b2c3d4-..."
         // =====================================================================
 
         // --- DONNÉES DE DÉMONSTRATION ENRICHIES ---
@@ -55,6 +55,26 @@
             { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: "2024-05-21T09:00:00.000Z", description: "Pilotage de projets web et méthodes agiles (Scrum).", typeContrat: "CDD", experienceLibelle: "Expérience exigée de 5 An(s)", teletravailPossible: true, competences: [{libelle: "Méthodes Agiles"}, {libelle: "Management"}], secteurActivite: "Conseil en systèmes informatiques" },
             { id: "148SIMI", intitule: "Intégrateur Web HTML/CSS (H/F)", entreprise: { nom: "WEB AGENCY 93" }, lieuTravail: { libelle: "93 - MONTREUIL", latitude: 48.8623, longitude: 2.4412 }, salaire: { libelle: "30000€" }, dateCreation: "2024-05-22T09:00:00.000Z", description: "Intégration web responsive pixel perfect.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "HTML5"}, {libelle: "CSS3"}], secteurActivite: "Création de sites internet" }
         ];
+
+        // --- GESTIONNAIRE DE REQUÊTES AVEC RÉESSAI (Gestion Quotas HTTP 429) ---
+        const fetchWithRetry = async (url, options, retries = 3) => {
+            try {
+                const res = await fetch(url, options);
+                // Si le quota de l'API est dépassé (429 Too Many Requests)
+                if (res.status === 429 && retries > 0) {
+                    // Lecture de l'en-tête Retry-After pour savoir combien de secondes attendre (défaut: 2s)
+                    const retryAfter = parseInt(res.headers.get('Retry-After') || '2', 10);
+                    console.warn(`Quota API France Travail dépassé (429). Retentative dans ${retryAfter} secondes...`);
+                    // Attente asynchrone
+                    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+                    // Nouvel appel récursif
+                    return fetchWithRetry(url, options, retries - 1);
+                }
+                return res;
+            } catch (error) {
+                throw error;
+            }
+        };
 
         function App() {
             // --- ÉTATS GLOBAUX ---
@@ -71,6 +91,7 @@
             
             // --- API & PAGINATION ---
             const [useRealApi, setUseRealApi] = useState(() => (localStorage.getItem('ft_use_real') === 'true' || DEFAULT_FT_CLIENT_ID !== ""));
+            const [useCorsProxy, setUseCorsProxy] = useState(() => localStorage.getItem('ft_use_cors_proxy') !== 'false'); // Activé par défaut pour le web
             const [ftClientId, setFtClientId] = useState(() => localStorage.getItem('ft_client_id') || DEFAULT_FT_CLIENT_ID);
             const [ftClientSecret, setFtClientSecret] = useState(() => localStorage.getItem('ft_client_secret') || DEFAULT_FT_CLIENT_SECRET);
             const [page, setPage] = useState(0);
@@ -202,17 +223,26 @@
                 try {
                     if (useRealApi && ftClientId && ftClientSecret) {
                         try {
-                            // 1. Authentification
+                            // 1. URL d'Authentification OAuth2 (Client Credentials)
+                            let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
+                            if (useCorsProxy) tokenUrl = `https://corsproxy.io/?${encodeURIComponent(tokenUrl)}`;
+
                             const tokenParams = new URLSearchParams();
                             tokenParams.append('grant_type', 'client_credentials');
                             tokenParams.append('client_id', ftClientId);
                             tokenParams.append('client_secret', ftClientSecret);
                             tokenParams.append('scope', 'api_offresdemploiv2 o2dsoffre');
 
-                            const tokenRes = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire', {
-                                method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: tokenParams.toString()
+                            // Utilisation de notre fonction avec gestion des quotas (429)
+                            const tokenRes = await fetchWithRetry(tokenUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                                body: tokenParams.toString()
                             });
-                            if (!tokenRes.ok) throw new Error("Erreur d'authentification");
+
+                            if (!tokenRes.ok) {
+                                throw new Error(`Erreur d'authentification: ${tokenRes.status}`);
+                            }
                             const tokenData = await tokenRes.json();
 
                             // 2. Construction de la requête avec Filtres et Code INSEE
@@ -237,16 +267,20 @@
                             searchParams.append('range', `${start}-${end}`);
                             
                             const queryString = searchParams.toString();
-                            const jobsUrl = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search${queryString ? '?' + queryString : ''}`;
+                            let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search${queryString ? '?' + queryString : ''}`;
+                            let jobsUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
                             
-                            const jobsRes = await fetch(jobsUrl, {
-                                headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
+                            const jobsRes = await fetchWithRetry(jobsUrl, {
+                                headers: { 
+                                    Authorization: `Bearer ${tokenData.access_token}`, 
+                                    Accept: 'application/json' 
+                                }
                             });
 
                             if (jobsRes.status === 204) {
                                 fetchedJobs = [];
                                 setHasMore(false);
-                            } else if (!jobsRes.ok) throw new Error("Erreur serveur API");
+                            } else if (!jobsRes.ok) throw new Error("Erreur serveur API lors de la récupération des offres");
                             else {
                                 const jobsData = await jobsRes.json();
                                 fetchedJobs = jobsData.resultats || [];
@@ -254,6 +288,7 @@
                             }
                         } catch (error) {
                             console.error("Fallback Mock suite erreur:", error);
+                            alert("Erreur de connexion à l'API France Travail.\nSi c'est une erreur CORS, assurez-vous que le proxy est activé dans les paramètres.\nL'application bascule sur les données de démonstration.");
                             fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                         }
                     } else {
@@ -658,7 +693,7 @@
                         <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-in-bottom">
                                 <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> Clés API France Travail</h2>
+                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> API France Travail</h2>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700"><i className="fas fa-times"></i></button>
                                 </div>
                                 <div className="p-5 space-y-4">
@@ -669,14 +704,31 @@
                                             <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </div>
+                                    
                                     <div className={`space-y-3 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
                                         <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client ID</label><input type="text" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientId} onChange={(e) => setFtClientId(e.target.value)} placeholder="PAR_votrenom_..."/></div>
                                         <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client Secret</label><input type="password" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientSecret} onChange={(e) => setFtClientSecret(e.target.value)} placeholder="••••••••••••"/></div>
+                                        
+                                        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-[11px] text-yellow-800 leading-tight">
+                                            <i className="fas fa-exclamation-triangle mr-1 text-yellow-600"></i><strong>Alerte de Sécurité Officielle :</strong><br/>
+                                            France Travail exige que la Clé Secrète reste côté Serveur (Backend). En production, vous devrez migrer ces requêtes vers un serveur.
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border border-gray-200 mt-2">
+                                            <div>
+                                                <span className="text-sm font-semibold text-gray-800 block">Utiliser un proxy CORS</span>
+                                                <span className="text-[10px] text-gray-500 block">Nécessaire pour contourner le blocage navigateur (Dév)</span>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={useCorsProxy} onChange={(e) => setUseCorsProxy(e.target.checked)}/>
+                                                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gray-600"></div>
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
                                     <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition">Annuler</button>
-                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
+                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_use_cors_proxy', useCorsProxy); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
                                 </div>
                             </div>
                         </div>
