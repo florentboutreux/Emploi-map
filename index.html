@@ -3,81 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recherche Emploi Map</title>
+    <title>Recherche Emploi Map - PRO</title>
     
-    <!-- Tailwind CSS pour le design -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- FontAwesome pour les icônes -->
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Leaflet pour la carte -->
+    <!-- Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- React & Babel pour faire fonctionner l'application directement dans le navigateur -->
+    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        /* Animation pour le panneau latéral de détail */
+        @keyframes slideInRight {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+        }
+        .slide-in-right { animation: slideInRight 0.3s ease-out forwards; }
+        
+        /* Personnalisation de la barre de défilement */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
 </head>
-<body class="bg-gray-100">
+<body class="bg-gray-100 overflow-hidden text-gray-800 font-sans">
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-        // --- FONCTION UTILITAIRE ---
-        const calcDist = (lat1, lon1, lat2, lon2) => {
-            const toRad = x => (x * Math.PI) / 180;
-            const R = 6371; 
-            const dLat = toRad(lat2 - lat1);
-            const dLon = toRad(lon2 - lon1);
-            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        };
+        // =====================================================================
+        // 🔑 CONFIGURATION DE L'API FRANCE TRAVAIL
+        // =====================================================================
+        const DEFAULT_FT_CLIENT_ID = ""; // Ex: "PAR_votre_projet_..."
+        const DEFAULT_FT_CLIENT_SECRET = ""; // Ex: "a1b2c3d4-..."
+        // =====================================================================
 
-        // --- DONNÉES DE DÉMONSTRATION ---
+        // --- DONNÉES DE DÉMONSTRATION ENRICHIES ---
         const MOCK_JOBS = [
-            { id: "145ABCD", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION" }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: "2024-05-20T10:30:00.000Z", description: "Maîtrise de React et Node.js exigée.", typeContrat: "CDI", isSimilar: false },
-            { id: "145XYZA", intitule: "Ingénieur Système et Réseau (H/F)", entreprise: { nom: "GLOBAL NETWORKS" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "38000€ à 42000€" }, dateCreation: "2024-05-19T14:15:00.000Z", description: "Gestion des infrastructures cloud.", typeContrat: "CDI", isSimilar: false },
-            { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: "2024-05-21T09:00:00.000Z", description: "Pilotage de projets web et agiles.", typeContrat: "CDD - 6 mois", isSimilar: false },
-            { id: "146TRPZ", intitule: "Data Analyst Junior (H/F)", entreprise: { nom: "DATA STARTUP" }, lieuTravail: { libelle: "94 - VINCENNES", latitude: 48.8470, longitude: 2.4406 }, salaire: { libelle: "35000€" }, dateCreation: "2024-05-18T16:45:00.000Z", description: "Analyse de données sous Tableau.", typeContrat: "CDI", isSimilar: false },
-            { id: "147MLKJ", intitule: "Designer UX/UI (H/F)", entreprise: { nom: "CREATIVE STUDIO" }, lieuTravail: { libelle: "91 - MASSY", latitude: 48.7307, longitude: 2.2713 }, salaire: { libelle: "A négocier" }, dateCreation: "2024-05-21T11:20:00.000Z", description: "Conception d'interfaces sur Figma.", typeContrat: "Freelance", isSimilar: true },
-            { id: "148SIMI", intitule: "Intégrateur Web HTML/CSS (H/F)", entreprise: { nom: "WEB AGENCY 93" }, lieuTravail: { libelle: "93 - MONTREUIL", latitude: 48.8623, longitude: 2.4412 }, salaire: { libelle: "30000€" }, dateCreation: "2024-05-22T09:00:00.000Z", description: "Intégration web responsive.", typeContrat: "CDI", isSimilar: true }
+            { id: "145ABCD", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION", description: "Startup innovante dans la GreenTech." }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: "2024-05-20T10:30:00.000Z", description: "Vous concevrez des architectures complexes. Maîtrise de React et Node.js exigée. Esprit d'équipe indispensable.", typeContrat: "CDI", natureContrat: "Contrat travail", experienceLibelle: "Expérience exigée de 2 An(s)", teletravailPossible: true, competences: [{libelle: "React JS"}, {libelle: "Node.js"}, {libelle: "Git"}], secteurActivite: "Édition de logiciels", contact: {nom: "Mme Dupont", coordonnees1: "recrutement@tech.fr"} },
+            { id: "145XYZA", intitule: "Ingénieur Système et Réseau (H/F)", entreprise: { nom: "GLOBAL NETWORKS" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "38000€ à 42000€" }, dateCreation: "2024-05-19T14:15:00.000Z", description: "Gestion des infrastructures cloud AWS et Azure.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "AWS"}, {libelle: "Réseaux TCP/IP"}], secteurActivite: "Télécommunications" },
+            { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: "2024-05-21T09:00:00.000Z", description: "Pilotage de projets web et méthodes agiles (Scrum).", typeContrat: "CDD", experienceLibelle: "Expérience exigée de 5 An(s)", teletravailPossible: true, competences: [{libelle: "Méthodes Agiles"}, {libelle: "Management"}], secteurActivite: "Conseil en systèmes informatiques" },
+            { id: "148SIMI", intitule: "Intégrateur Web HTML/CSS (H/F)", entreprise: { nom: "WEB AGENCY 93" }, lieuTravail: { libelle: "93 - MONTREUIL", latitude: 48.8623, longitude: 2.4412 }, salaire: { libelle: "30000€" }, dateCreation: "2024-05-22T09:00:00.000Z", description: "Intégration web responsive pixel perfect.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "HTML5"}, {libelle: "CSS3"}], secteurActivite: "Création de sites internet" }
         ];
 
         function App() {
+            // --- ÉTATS GLOBAUX ---
             const [hasSearched, setHasSearched] = useState(false);
             const [jobs, setJobs] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
+            const [viewMode, setViewMode] = useState('search'); // 'search' ou 'favorites'
             
+            // --- AUTO-COMPLÉTION & GÉOGRAPHIE ---
             const [addressQuery, setAddressQuery] = useState('');
             const [addressSuggestions, setAddressSuggestions] = useState([]);
             const [isSuggesting, setIsSuggesting] = useState(false);
-            const [homeLatLng, setHomeLatLng] = useState(null);
+            const [homeLatLng, setHomeLatLng] = useState(null); // Contient aussi .cityCode (INSEE)
             
-            const [showSettings, setShowSettings] = useState(false);
-            const [useRealApi, setUseRealApi] = useState(() => localStorage.getItem('ft_use_real') === 'true');
-            const [ftClientId, setFtClientId] = useState(() => localStorage.getItem('ft_client_id') || '');
-            const [ftClientSecret, setFtClientSecret] = useState(() => localStorage.getItem('ft_client_secret') || '');
+            // --- API & PAGINATION ---
+            const [useRealApi, setUseRealApi] = useState(() => (localStorage.getItem('ft_use_real') === 'true' || DEFAULT_FT_CLIENT_ID !== ""));
+            const [ftClientId, setFtClientId] = useState(() => localStorage.getItem('ft_client_id') || DEFAULT_FT_CLIENT_ID);
+            const [ftClientSecret, setFtClientSecret] = useState(() => localStorage.getItem('ft_client_secret') || DEFAULT_FT_CLIENT_SECRET);
+            const [page, setPage] = useState(0);
+            const [hasMore, setHasMore] = useState(false);
+            const [isSearching, setIsSearching] = useState(false);
 
+            // --- FAVORIS (Sauvegarde Locale) ---
+            const [favoriteJobs, setFavoriteJobs] = useState(() => {
+                const saved = localStorage.getItem('ft_favorites');
+                return saved ? JSON.parse(saved) : [];
+            });
+
+            // --- FILTRES AVANCÉS ---
             const [showFilters, setShowFilters] = useState(false);
             const [transportMode, setTransportMode] = useState('driving'); 
             const [maxDuration, setMaxDuration] = useState(45); 
-            const [expandSearch, setExpandSearch] = useState(false); 
+            const [maxDistance, setMaxDistance] = useState(30); // Rayon INSEE API (km)
+            
+            const [filterContract, setFilterContract] = useState(''); // '', 'CDI', 'CDD', 'MIS' (Intérim), 'ALT'
+            const [filterExperience, setFilterExperience] = useState(''); // '1' (Débutant), '2' (1-3 ans), '3' (+3 ans)
+            const [filterTime, setFilterTime] = useState(''); // 'true' (Temps plein), 'false' (Temps partiel)
+            const [filterRemote, setFilterRemote] = useState(false);
+
             const [jobRoutes, setJobRoutes] = useState({}); 
 
-            const [selectedJob, setSelectedJob] = useState(null);
+            // --- UI ---
+            const [selectedJob, setSelectedJob] = useState(null); // Pour la carte
+            const [detailedJob, setDetailedJob] = useState(null); // Pour le panneau latéral
             const [sortBy, setSortBy] = useState('duration');
-            const [isSearching, setIsSearching] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
             const [isMapLoaded, setIsMapLoaded] = useState(false);
 
+            // --- RÉFÉRENCES ---
             const mapRef = useRef(null);
             const mapInstanceRef = useRef(null);
             const markersRef = useRef({});
             const homeMarkerRef = useRef(null);
             const routeLayerRef = useRef(null);
             const suggestionBoxRef = useRef(null);
+
+            // Sauvegarde automatique des favoris
+            useEffect(() => {
+                localStorage.setItem('ft_favorites', JSON.stringify(favoriteJobs));
+            }, [favoriteJobs]);
+
+            const toggleFavorite = (job, e) => {
+                e.stopPropagation();
+                if (favoriteJobs.some(f => f.id === job.id)) {
+                    setFavoriteJobs(favoriteJobs.filter(f => f.id !== job.id));
+                } else {
+                    setFavoriteJobs([...favoriteJobs, job]);
+                }
+            };
 
             const getCalculatedDuration = useCallback((baseDistanceKm, baseOsrmDurationMin, mode) => {
                 if (mode === 'driving') return baseOsrmDurationMin;
@@ -86,38 +132,32 @@
                 return baseOsrmDurationMin;
             }, []);
 
+            // Initialisation Leaflet
             useEffect(() => {
                 if (!mapRef.current || !window.L || mapInstanceRef.current) return;
                 mapInstanceRef.current = window.L.map(mapRef.current, { zoomControl: false }).setView([46.603354, 1.888334], 6);
                 window.L.control.zoom({ position: 'topright' }).addTo(mapInstanceRef.current);
-                window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap'
-                }).addTo(mapInstanceRef.current);
+                window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(mapInstanceRef.current);
                 setIsMapLoaded(true);
             }, []);
 
             const createCustomIcon = (type, isSelected = false) => {
                 if (!window.L) return null;
-                let color = '#2563eb'; 
-                if (type === 'home') color = '#16a34a'; 
-                else if (isSelected) color = '#dc2626'; 
-                else if (type === 'similar') color = '#f59e0b'; 
+                let color = '#2563eb'; // Bleu (Offre)
+                if (type === 'home') color = '#16a34a'; // Vert
+                else if (isSelected) color = '#dc2626'; // Rouge
+                else if (type === 'favorite') color = '#ec4899'; // Rose (Favori)
 
                 const svgPath = type === 'home' 
                     ? `<circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="2"/>`
                     : `<path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="${color}" stroke="white" stroke-width="1"/>`;
                 
-                return window.L.divIcon({
-                    html: `<svg viewBox="0 0 24 24" width="30" height="30" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`,
-                    className: '', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30]
-                });
+                return window.L.divIcon({ html: `<svg viewBox="0 0 24 24" width="30" height="30" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`, className: '', iconSize: [30, 30], iconAnchor: [15, 30], popupAnchor: [0, -30] });
             };
 
+            // Auto-complétion Adresse (Gouv)
             useEffect(() => {
-                if (!isSuggesting || addressQuery.length < 3) {
-                    setAddressSuggestions([]);
-                    return;
-                }
+                if (!isSuggesting || addressQuery.length < 3) { setAddressSuggestions([]); return; }
                 const timer = setTimeout(async () => {
                     try {
                         const response = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(addressQuery)}&limit=5`);
@@ -133,38 +173,36 @@
                 setAddressSuggestions([]);
                 setIsSuggesting(false);
                 const coords = feature.geometry.coordinates;
-                const latLng = { lat: coords[1], lng: coords[0] };
+                // RECUPERATION DU CODE INSEE (citycode) POUR L'API FRANCE TRAVAIL
+                const latLng = { lat: coords[1], lng: coords[0], cityCode: feature.properties.citycode };
                 setHomeLatLng(latLng);
                 
                 if (homeMarkerRef.current) homeMarkerRef.current.remove();
                 const icon = createCustomIcon('home');
                 homeMarkerRef.current = window.L.marker([latLng.lat, latLng.lng], { icon })
-                    .addTo(mapInstanceRef.current)
-                    .bindPopup("<b>Votre domicile</b><br/>" + feature.properties.label).openPopup();
-
-                mapInstanceRef.current.setView([latLng.lat, latLng.lng], 12);
+                    .addTo(mapInstanceRef.current).bindPopup("<b>Votre domicile</b>").openPopup();
+                mapInstanceRef.current.setView([latLng.lat, latLng.lng], 11);
                 return latLng;
             };
 
-            useEffect(() => {
-                const handleClickOutside = (event) => {
-                    if (suggestionBoxRef.current && !suggestionBoxRef.current.contains(event.target)) setIsSuggesting(false);
-                };
-                document.addEventListener("mousedown", handleClickOutside);
-                return () => document.removeEventListener("mousedown", handleClickOutside);
-            }, []);
-
-            const handleSearch = async () => {
+            // --- MOTEUR DE RECHERCHE PRINCIPAL ---
+            const handleSearch = async (isLoadMore = false) => {
+                if (isSearching) return;
                 setIsSearching(true);
+                setViewMode('search');
+
                 let currentHomeLatLng = homeLatLng;
                 if (addressQuery && !currentHomeLatLng && addressSuggestions.length > 0) {
                     currentHomeLatLng = handleSelectAddress(addressSuggestions[0]);
                 }
 
+                const targetPage = isLoadMore ? page + 1 : 0;
+                let fetchedJobs = [];
+
                 try {
-                    let fetchedJobs = [];
                     if (useRealApi && ftClientId && ftClientSecret) {
                         try {
+                            // 1. Authentification
                             const tokenParams = new URLSearchParams();
                             tokenParams.append('grant_type', 'client_credentials');
                             tokenParams.append('client_id', ftClientId);
@@ -174,11 +212,29 @@
                             const tokenRes = await fetch('https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire', {
                                 method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: tokenParams.toString()
                             });
-                            if (!tokenRes.ok) throw new Error("Échec d'authentification");
+                            if (!tokenRes.ok) throw new Error("Erreur d'authentification");
                             const tokenData = await tokenRes.json();
 
+                            // 2. Construction de la requête avec Filtres et Code INSEE
                             const searchParams = new URLSearchParams();
                             if (searchQuery) searchParams.append('motsCles', searchQuery);
+                            
+                            // Paramètres avancés
+                            if (filterContract) searchParams.append('typeContrat', filterContract);
+                            if (filterExperience) searchParams.append('experience', filterExperience);
+                            if (filterTime) searchParams.append('tempsPlein', filterTime);
+                            if (filterRemote) searchParams.append('teletravailPossible', 'true');
+                            
+                            // Géographie (INSEE)
+                            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
+                                searchParams.append('commune', currentHomeLatLng.cityCode);
+                                searchParams.append('distance', maxDistance); // API accepte généralement jusqu'à 100km
+                            }
+
+                            // Pagination (Blocs de 20)
+                            const start = targetPage * 20;
+                            const end = start + 19;
+                            searchParams.append('range', `${start}-${end}`);
                             
                             const queryString = searchParams.toString();
                             const jobsUrl = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search${queryString ? '?' + queryString : ''}`;
@@ -187,33 +243,30 @@
                                 headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
                             });
 
-                            if (jobsRes.status === 204) fetchedJobs = [];
-                            else if (!jobsRes.ok) throw new Error("Échec de la récupération");
+                            if (jobsRes.status === 204) {
+                                fetchedJobs = [];
+                                setHasMore(false);
+                            } else if (!jobsRes.ok) throw new Error("Erreur serveur API");
                             else {
                                 const jobsData = await jobsRes.json();
                                 fetchedJobs = jobsData.resultats || [];
-                                fetchedJobs = fetchedJobs.map((j, idx) => ({ ...j, isSimilar: idx % 4 === 0 })); 
+                                setHasMore(fetchedJobs.length === 20); // S'il y en a 20, il y a probablement une page suivante
                             }
                         } catch (error) {
-                            console.error("Erreur API France Travail:", error);
-                            fetchedJobs = MOCK_JOBS.filter(job => 
-                                job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                job.description.toLowerCase().includes(searchQuery.toLowerCase())
-                            );
+                            console.error("Fallback Mock suite erreur:", error);
+                            fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                         }
                     } else {
+                        // Utilisation du Mock si pas d'API
                         await new Promise(resolve => setTimeout(resolve, 500)); 
-                        fetchedJobs = MOCK_JOBS.filter(job => 
-                            job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            job.description.toLowerCase().includes(searchQuery.toLowerCase())
-                        );
+                        fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                     }
 
-                    let filteredJobs = expandSearch ? fetchedJobs : fetchedJobs.filter(j => !j.isSimilar);
-
-                    if (currentHomeLatLng) {
-                        const routes = {};
-                        await Promise.all(filteredJobs.map(async (job) => {
+                    // --- OSRM ROUTING (Calcul des temps pour les nouvelles offres uniquement) ---
+                    if (currentHomeLatLng && fetchedJobs.length > 0) {
+                        const newRoutes = { ...jobRoutes };
+                        await Promise.all(fetchedJobs.map(async (job) => {
+                            if (newRoutes[job.id] || !job.lieuTravail?.latitude) return;
                             const destLat = job.lieuTravail.latitude;
                             const destLng = job.lieuTravail.longitude;
                             const url = `https://router.project-osrm.org/route/v1/driving/${currentHomeLatLng.lng},${currentHomeLatLng.lat};${destLng},${destLat}?overview=false`;
@@ -221,25 +274,30 @@
                                 const res = await fetch(url);
                                 const data = await res.json();
                                 if (data.code === 'Ok' && data.routes.length > 0) {
-                                    routes[job.id] = {
+                                    newRoutes[job.id] = {
                                         osrmDurationMin: Math.round(data.routes[0].duration / 60),
                                         distanceKm: parseFloat((data.routes[0].distance / 1000).toFixed(1))
                                     };
                                 }
-                            } catch (err) { console.error(err); }
+                            } catch (err) { /* Erreur silencieuse pour OSRM */ }
                         }));
-                        setJobRoutes(routes);
+                        setJobRoutes(newRoutes);
 
-                        filteredJobs = filteredJobs.filter(job => {
-                            if (!routes[job.id]) return false;
-                            const currentModeDuration = getCalculatedDuration(routes[job.id].distanceKm, routes[job.id].osrmDurationMin, transportMode);
-                            return currentModeDuration <= maxDuration;
+                        // Filtrer par le Slider Temps Max (Application front-end post-requête API)
+                        fetchedJobs = fetchedJobs.filter(job => {
+                            if (!newRoutes[job.id]) return false;
+                            const currentModeDur = getCalculatedDuration(newRoutes[job.id].distanceKm, newRoutes[job.id].osrmDurationMin, transportMode);
+                            return currentModeDur <= maxDuration;
                         });
-                    } else {
-                        setJobRoutes({});
                     }
 
-                    setJobs(filteredJobs);
+                    if (isLoadMore) {
+                        setJobs(prev => [...prev, ...fetchedJobs]);
+                    } else {
+                        setJobs(fetchedJobs);
+                    }
+                    
+                    setPage(targetPage);
                     setSelectedJob(null);
                     setHasSearched(true);
                     setShowFilters(false);
@@ -248,21 +306,30 @@
                 }
             };
 
+            // Simulation de recherche sur les Mocks
+            const mockSearch = (targetPage, currentHomeLatLng) => {
+                if (targetPage > 0) { setHasMore(false); return []; } // 1 seule page de mock
+                setHasMore(false);
+                return MOCK_JOBS.filter(job => 
+                    (job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || job.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
+                    (filterContract === '' || job.typeContrat.includes(filterContract)) &&
+                    (filterExperience === '' || job.experienceLibelle.includes(filterExperience === '1' ? 'Débutant' : 'exigée')) &&
+                    (!filterRemote || job.teletravailPossible === true)
+                );
+            };
+
+            // Dessin du tracé sur la carte
             const calculateRouteGeometry = useCallback(async (job, origin = homeLatLng) => {
-                if (!job || !origin || !window.L || !mapInstanceRef.current) return;
+                if (!job || !origin || !window.L || !mapInstanceRef.current || !job.lieuTravail?.latitude) return;
                 try {
                     if (routeLayerRef.current) routeLayerRef.current.remove();
-                    const destLat = job.lieuTravail.latitude;
-                    const destLng = job.lieuTravail.longitude;
-                    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destLng},${destLat}?overview=full&geometries=geojson`;
-                    
+                    const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${job.lieuTravail.longitude},${job.lieuTravail.latitude}?overview=full&geometries=geojson`;
                     const response = await fetch(url);
                     const data = await response.json();
 
                     if (data.code === 'Ok' && data.routes.length > 0) {
                         let routeColor = transportMode === 'driving' ? '#2563eb' : transportMode === 'transit' ? '#9333ea' : '#16a34a';
-                        const route = data.routes[0];
-                        routeLayerRef.current = window.L.geoJSON(route.geometry, {
+                        routeLayerRef.current = window.L.geoJSON(data.routes[0].geometry, {
                             style: { color: routeColor, weight: 6, opacity: 0.7, dashArray: transportMode === 'transit' ? '5, 10' : null }
                         }).addTo(mapInstanceRef.current);
 
@@ -277,6 +344,7 @@
                 else if (routeLayerRef.current) routeLayerRef.current.remove();
             }, [selectedJob, homeLatLng, calculateRouteGeometry]);
 
+            // Mise à jour des marqueurs carte
             useEffect(() => {
                 if (!isMapLoaded || !window.L || !mapInstanceRef.current) return;
                 Object.values(markersRef.current).forEach(marker => marker.remove());
@@ -285,16 +353,19 @@
                 const bounds = window.L.latLngBounds();
                 let hasValidJobs = false;
 
-                jobs.forEach(job => {
+                const displayList = viewMode === 'favorites' ? favoriteJobs : jobs;
+
+                displayList.forEach(job => {
                     if (job.lieuTravail && job.lieuTravail.latitude && job.lieuTravail.longitude) {
                         const latLng = [job.lieuTravail.latitude, job.lieuTravail.longitude];
                         const isSelected = selectedJob?.id === job.id;
-                        const type = isSelected ? 'selected' : (job.isSimilar ? 'similar' : 'exact');
+                        const isFav = favoriteJobs.some(f => f.id === job.id);
+                        const type = isSelected ? 'selected' : (isFav ? 'favorite' : 'exact');
                         
                         const icon = createCustomIcon(type, isSelected);
                         const marker = window.L.marker(latLng, { icon }).addTo(mapInstanceRef.current);
-                        marker.on('click', () => setSelectedJob(job));
-
+                        
+                        marker.on('click', () => { setSelectedJob(job); setDetailedJob(job); });
                         markersRef.current[job.id] = marker;
                         bounds.extend(latLng);
                         hasValidJobs = true;
@@ -302,27 +373,23 @@
                 });
 
                 if (hasValidJobs && !selectedJob && !homeLatLng) {
-                    mapInstanceRef.current.fitBounds(bounds, { 
-                        paddingTopLeft: hasSearched ? [420, 50] : [50, 50], paddingBottomRight: [50, 50]
-                    });
+                    mapInstanceRef.current.fitBounds(bounds, { paddingTopLeft: hasSearched ? [420, 50] : [50, 50], paddingBottomRight: [50, 50] });
                 }
-            }, [jobs, isMapLoaded, selectedJob, hasSearched, homeLatLng]);
+            }, [jobs, favoriteJobs, viewMode, isMapLoaded, selectedJob, hasSearched, homeLatLng]);
 
-            const sortedJobs = useMemo(() => {
-                let sorted = [...jobs];
+            const displayJobs = useMemo(() => {
+                let list = viewMode === 'favorites' ? [...favoriteJobs] : [...jobs];
                 if (sortBy === 'date') {
-                    sorted.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
+                    list.sort((a, b) => new Date(b.dateCreation) - new Date(a.dateCreation));
                 } else if (sortBy === 'duration' && homeLatLng) {
-                    sorted.sort((a, b) => {
-                        const routeA = jobRoutes[a.id];
-                        const routeB = jobRoutes[b.id];
-                        const durA = routeA ? getCalculatedDuration(routeA.distanceKm, routeA.osrmDurationMin, transportMode) : 9999;
-                        const durB = routeB ? getCalculatedDuration(routeB.distanceKm, routeB.osrmDurationMin, transportMode) : 9999;
+                    list.sort((a, b) => {
+                        const durA = jobRoutes[a.id] ? getCalculatedDuration(jobRoutes[a.id].distanceKm, jobRoutes[a.id].osrmDurationMin, transportMode) : 9999;
+                        const durB = jobRoutes[b.id] ? getCalculatedDuration(jobRoutes[b.id].distanceKm, jobRoutes[b.id].osrmDurationMin, transportMode) : 9999;
                         return durA - durB;
                     });
                 }
-                return sorted;
-            }, [jobs, sortBy, homeLatLng, jobRoutes, transportMode, getCalculatedDuration]);
+                return list;
+            }, [jobs, favoriteJobs, viewMode, sortBy, homeLatLng, jobRoutes, transportMode, getCalculatedDuration]);
 
             const formatTime = (minutes) => {
                 if (minutes > 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}min`;
@@ -333,193 +400,270 @@
                 <div className="relative w-full h-screen bg-gray-100 overflow-hidden font-sans text-gray-800">
                     <div ref={mapRef} className="absolute inset-0 z-0" />
 
-                    <button 
-                        onClick={() => setShowSettings(true)}
-                        className="absolute top-4 right-4 z-[1000] bg-white p-2.5 rounded-xl shadow-lg border border-gray-100 text-gray-600 hover:text-blue-600 transition"
-                    >
-                        <i className="fas fa-cog text-xl"></i>
-                    </button>
+                    {/* --- HEADER --- */}
+                    <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-between items-start pointer-events-none">
+                        <div className="flex gap-2 pointer-events-auto">
+                            <button onClick={() => setViewMode('search')} className={`px-4 py-2 rounded-xl shadow-lg font-bold transition flex items-center gap-2 ${viewMode === 'search' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                <i className="fas fa-search"></i> Recherche
+                            </button>
+                            <button onClick={() => setViewMode('favorites')} className={`px-4 py-2 rounded-xl shadow-lg font-bold transition flex items-center gap-2 ${viewMode === 'favorites' ? 'bg-pink-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                <i className="fas fa-heart"></i> Favoris ({favoriteJobs.length})
+                            </button>
+                        </div>
+                        <button onClick={() => setShowSettings(true)} className="bg-white p-3 rounded-xl shadow-lg border border-gray-100 text-gray-600 hover:text-blue-600 transition pointer-events-auto">
+                            <i className="fas fa-cog text-xl"></i>
+                        </button>
+                    </div>
 
-                    {!hasSearched && (
-                        <div className="absolute inset-0 bg-black bg-opacity-20 z-10 pointer-events-none transition-opacity duration-700" />
+                    {!hasSearched && viewMode === 'search' && (
+                        <div className="absolute inset-0 bg-black bg-opacity-30 z-10 pointer-events-none transition-opacity duration-700" />
                     )}
 
-                    <div className={`absolute z-[1000] transition-all duration-700 ease-in-out ${hasSearched ? 'top-4 left-4 w-[90%] md:w-[450px]' : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90%] md:w-[700px]'}`}>
+                    {/* --- BARRE DE RECHERCHE & FILTRES --- */}
+                    {viewMode === 'search' && (
+                    <div className={`absolute z-[1000] transition-all duration-700 ease-in-out ${hasSearched ? 'top-[70px] left-4 w-[90%] md:w-[450px]' : 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90%] md:w-[750px]'}`}>
                         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col p-2 gap-2">
                             <div className="flex flex-col md:flex-row gap-2">
                                 <div className="relative flex-1 flex items-center bg-gray-50 rounded-xl px-3 py-2">
-                                    <i className="fas fa-search text-gray-400 mr-2 text-lg"></i>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Métier, compétence..." 
-                                        className="w-full bg-transparent text-sm focus:outline-none text-gray-700 placeholder-gray-400"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                                    />
+                                    <i className="fas fa-search text-gray-400 mr-2"></i>
+                                    <input type="text" placeholder="Métier, compétence..." className="w-full bg-transparent text-sm focus:outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
                                 </div>
                                 <div className="hidden md:block w-px bg-gray-200 my-2" />
                                 <div className="relative flex-1 flex items-center bg-gray-50 rounded-xl px-3 py-2" ref={suggestionBoxRef}>
-                                    <i className="fas fa-map-marker-alt text-gray-400 mr-2 text-lg"></i>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Domicile (Ville...)" 
-                                        className="w-full bg-transparent text-sm focus:outline-none text-gray-700 placeholder-gray-400"
-                                        value={addressQuery}
-                                        onChange={(e) => {
-                                            setAddressQuery(e.target.value);
-                                            setIsSuggesting(true);
-                                            if (homeLatLng) setHomeLatLng(null); 
-                                        }}
-                                        onFocus={() => setIsSuggesting(true)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                                    />
+                                    <i className="fas fa-map-marker-alt text-gray-400 mr-2"></i>
+                                    <input type="text" placeholder="Domicile (Ville...)" className="w-full bg-transparent text-sm focus:outline-none" value={addressQuery} onChange={(e) => { setAddressQuery(e.target.value); setIsSuggesting(true); if (homeLatLng) setHomeLatLng(null); }} onFocus={() => setIsSuggesting(true)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
                                     {isSuggesting && addressSuggestions.length > 0 && (
                                         <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[1001]">
                                             {addressSuggestions.map((feature) => (
-                                                <div 
-                                                    key={feature.properties.id}
-                                                    className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-50 flex items-center gap-2"
-                                                    onClick={() => handleSelectAddress(feature)}
-                                                >
-                                                    <i className="fas fa-map-marker-alt text-gray-400"></i>
-                                                    <span className="truncate">{feature.properties.label}</span>
+                                                <div key={feature.properties.id} className="px-4 py-3 hover:bg-gray-50 cursor-pointer text-sm border-b border-gray-50 flex items-center gap-2" onClick={() => handleSelectAddress(feature)}>
+                                                    <i className="fas fa-map-marker-alt text-gray-400"></i><span className="truncate">{feature.properties.label}</span>
                                                 </div>
                                             ))}
                                         </div>
                                     )}
                                 </div>
-                                <button 
-                                    onClick={() => setShowFilters(!showFilters)}
-                                    className={`p-2 rounded-xl transition flex-shrink-0 flex items-center justify-center relative ${showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-500 hover:text-gray-800'}`}
-                                >
+                                <button onClick={() => setShowFilters(!showFilters)} className={`p-2.5 rounded-xl transition flex-shrink-0 flex items-center justify-center relative ${showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-50 text-gray-500 hover:text-gray-800'}`}>
                                     <i className="fas fa-sliders-h text-lg"></i>
-                                    {(expandSearch || transportMode !== 'driving' || maxDuration !== 45) && !showFilters && (
-                                        <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
-                                    )}
+                                    {(filterContract || filterExperience || filterRemote || maxDuration !== 45) && !showFilters && <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>}
                                 </button>
-                                <button 
-                                    onClick={handleSearch}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5 py-3 md:py-2 text-sm font-semibold transition shadow-md flex-shrink-0 flex items-center justify-center gap-2"
-                                    disabled={isSearching}
-                                >
-                                    {isSearching ? <span className="animate-pulse">...</span> : 'Chercher'}
+                                <button onClick={() => handleSearch(false)} className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-3 md:py-2 text-sm font-bold shadow-md transition" disabled={isSearching}>
+                                    {isSearching ? <i className="fas fa-circle-notch fa-spin"></i> : 'Chercher'}
                                 </button>
                             </div>
 
-                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                            {/* FILTRES AVANCÉS */}
+                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[800px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
                                 <div className="p-4 border-t border-gray-100 bg-gray-50/80 rounded-b-xl space-y-4">
-                                    <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-200">
-                                        <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
-                                            <div className={`p-1.5 rounded-lg ${expandSearch ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-500'}`}>
-                                                <i className="fas fa-code-branch"></i>
-                                            </div>
-                                            Élargir aux métiers similaires
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Contrat</label>
+                                            <select value={filterContract} onChange={(e) => setFilterContract(e.target.value)} className="w-full text-sm bg-white border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500">
+                                                <option value="">Tous les contrats</option><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="MIS">Intérim</option><option value="ALT">Alternance</option>
+                                            </select>
                                         </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input type="checkbox" className="sr-only peer" checked={expandSearch} onChange={(e) => setExpandSearch(e.target.checked)}/>
-                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
-                                        </label>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Expérience</label>
+                                            <select value={filterExperience} onChange={(e) => setFilterExperience(e.target.value)} className="w-full text-sm bg-white border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500">
+                                                <option value="">Indifférent</option><option value="1">Débutant accepté</option><option value="2">1 à 3 ans</option><option value="3">+ de 3 ans</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Temps de travail</label>
+                                            <select value={filterTime} onChange={(e) => setFilterTime(e.target.value)} className="w-full text-sm bg-white border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500">
+                                                <option value="">Indifférent</option><option value="true">Temps Plein</option><option value="false">Temps Partiel</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-200 mt-[18px]">
+                                            <span className="text-sm font-medium"><i className="fas fa-home text-blue-500 mr-2"></i>Télétravail</span>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" className="sr-only peer" checked={filterRemote} onChange={(e) => setFilterRemote(e.target.checked)}/>
+                                                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </label>
+                                        </div>
                                     </div>
 
-                                    <div className="flex flex-col md:flex-row gap-4">
-                                        <div className="flex-1">
-                                            <label className="text-xs font-semibold text-gray-600 mb-2 block uppercase tracking-wide">Transport</label>
-                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-gray-200">
-                                                <button onClick={() => setTransportMode('driving')} className={`flex-1 py-1.5 flex items-center justify-center gap-1 text-sm rounded-lg transition ${transportMode === 'driving' ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-500 hover:bg-gray-50'}`}><i className="fas fa-car"></i> <span className="hidden sm:inline">Auto</span></button>
-                                                <button onClick={() => setTransportMode('transit')} className={`flex-1 py-1.5 flex items-center justify-center gap-1 text-sm rounded-lg transition ${transportMode === 'transit' ? 'bg-purple-100 text-purple-700 font-bold' : 'text-gray-500 hover:bg-gray-50'}`}><i className="fas fa-bus"></i> <span className="hidden sm:inline">Transit</span></button>
-                                                <button onClick={() => setTransportMode('cycling')} className={`flex-1 py-1.5 flex items-center justify-center gap-1 text-sm rounded-lg transition ${transportMode === 'cycling' ? 'bg-green-100 text-green-700 font-bold' : 'text-gray-500 hover:bg-gray-50'}`}><i className="fas fa-bicycle"></i> <span className="hidden sm:inline">Vélo</span></button>
-                                            </div>
+                                    <hr className="border-gray-200"/>
+
+                                    <div className="flex flex-col gap-3">
+                                        <div className="flex justify-between items-center">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rayon (API France Travail)</label>
+                                            <span className="text-xs font-bold text-gray-700">{maxDistance} km</span>
                                         </div>
-                                        <div className="flex-[1.5]">
-                                            <div className="flex justify-between items-end mb-2">
-                                                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Trajet max.</label>
-                                                <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{maxDuration === 120 ? 'Illimité' : formatTime(maxDuration)}</span>
-                                            </div>
-                                            <input type="range" min="10" max="120" step="5" value={maxDuration} onChange={(e) => setMaxDuration(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"/>
+                                        <input type="range" min="5" max="100" step="5" value={maxDistance} onChange={(e) => setMaxDistance(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-600 disabled:opacity-50"/>
+                                        
+                                        <div className="flex gap-2 bg-white p-1 rounded-xl border border-gray-200 w-full md:w-2/3 mt-2">
+                                            <button onClick={() => setTransportMode('driving')} className={`flex-1 py-1 text-xs rounded-lg transition ${transportMode === 'driving' ? 'bg-blue-100 text-blue-700 font-bold' : 'text-gray-500'}`}><i className="fas fa-car mr-1"></i> Auto</button>
+                                            <button onClick={() => setTransportMode('transit')} className={`flex-1 py-1 text-xs rounded-lg transition ${transportMode === 'transit' ? 'bg-purple-100 text-purple-700 font-bold' : 'text-gray-500'}`}><i className="fas fa-bus mr-1"></i> Transit</button>
+                                            <button onClick={() => setTransportMode('cycling')} className={`flex-1 py-1 text-xs rounded-lg transition ${transportMode === 'cycling' ? 'bg-green-100 text-green-700 font-bold' : 'text-gray-500'}`}><i className="fas fa-bicycle mr-1"></i> Vélo</button>
                                         </div>
+                                        <div className="flex justify-between items-end mt-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Trajet Local Max.</label>
+                                            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{maxDuration === 120 ? 'Illimité' : formatTime(maxDuration)}</span>
+                                        </div>
+                                        <input type="range" min="10" max="120" step="5" value={maxDuration} onChange={(e) => setMaxDuration(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"/>
                                     </div>
-                                    {!addressQuery && <p className="text-[11px] text-red-500 mt-1 text-center font-medium">⚠️ Domicile obligatoire pour filtrer par temps.</p>}
                                 </div>
                             </div>
                         </div>
                     </div>
+                    )}
 
-                    <div className={`absolute left-4 bottom-4 w-[90%] md:w-[450px] bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col z-[990] transition-all duration-700 ease-in-out ${hasSearched ? 'translate-x-0 opacity-100' : '-translate-x-[150%] opacity-0'}`} style={{ top: hasSearched ? (showFilters ? '280px' : '90px') : '90px' }}>
-                        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-2xl">
-                            <span className="text-sm text-gray-700 font-semibold">{jobs.length} offre{jobs.length > 1 ? 's' : ''}</span>
+                    {/* --- LISTE DES OFFRES --- */}
+                    <div className={`absolute left-4 bottom-4 w-[90%] md:w-[450px] bg-white rounded-2xl shadow-xl border border-gray-100 flex flex-col z-[990] transition-all duration-700 ease-in-out ${hasSearched || viewMode === 'favorites' ? 'translate-x-0 opacity-100' : '-translate-x-[150%] opacity-0'}`} style={{ top: viewMode === 'favorites' ? '80px' : (showFilters ? '320px' : '140px') }}>
+                        <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50 rounded-t-2xl">
+                            <span className="text-sm text-gray-700 font-bold">{displayJobs.length} {viewMode === 'favorites' ? 'favoris' : 'offres trouvées'}</span>
                             <div className="flex items-center gap-2">
-                                <i className="fas fa-filter text-gray-400"></i>
-                                <select className="text-sm bg-white border border-gray-200 rounded-lg py-1.5 px-2 text-gray-700 outline-none focus:border-blue-500 shadow-sm" value={sortBy} onChange={(e) => { if (e.target.value === 'duration' && !homeLatLng) return alert("Indiquez votre domicile."); setSortBy(e.target.value); }}>
-                                    <option value="duration">Trajet le plus rapide</option>
-                                    <option value="date">Plus récentes</option>
+                                <i className="fas fa-sort-amount-down text-gray-400"></i>
+                                <select className="text-sm bg-white border border-gray-200 rounded-lg py-1 px-2 text-gray-700 outline-none focus:border-blue-500" value={sortBy} onChange={(e) => { if (e.target.value === 'duration' && !homeLatLng) return alert("Indiquez votre domicile."); setSortBy(e.target.value); }}>
+                                    <option value="duration">Plus rapide</option>
+                                    <option value="date">Plus récent</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            {sortedJobs.length === 0 ? (
-                                <div className="text-center p-8 text-gray-500 flex flex-col items-center">
-                                    <i className="fas fa-map text-4xl mb-3 text-gray-300"></i>
-                                    <p>Aucune offre ne correspond à vos critères.</p>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-3 pb-20">
+                            {displayJobs.length === 0 ? (
+                                <div className="text-center p-8 text-gray-400 mt-10">
+                                    <i className={`fas ${viewMode === 'favorites' ? 'fa-heart-broken' : 'fa-map-marked-alt'} text-4xl mb-4 opacity-50`}></i>
+                                    <p>{viewMode === 'favorites' ? "Vous n'avez pas encore de favoris." : "Aucune offre ne correspond à vos critères."}</p>
                                 </div>
                             ) : (
-                                sortedJobs.map((job) => {
+                                displayJobs.map((job) => {
                                     const route = jobRoutes[job.id];
                                     const estimatedDuration = route ? getCalculatedDuration(route.distanceKm, route.osrmDurationMin, transportMode) : null;
-                                    const isSim = job.isSimilar;
-                                    const borderColor = selectedJob?.id === job.id ? 'border-blue-500' : (isSim ? 'border-orange-200' : 'border-gray-100');
-                                    const badgeColor = isSim ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700';
+                                    const isFav = favoriteJobs.some(f => f.id === job.id);
+                                    const isSel = selectedJob?.id === job.id;
 
                                     return (
-                                        <div key={job.id} onClick={() => setSelectedJob(job)} className={`bg-white p-4 rounded-xl border-2 transition cursor-pointer hover:shadow-md ${borderColor}`}>
+                                        <div key={job.id} onClick={() => { setSelectedJob(job); setDetailedJob(job); }} className={`bg-white p-4 rounded-xl border-2 transition cursor-pointer hover:shadow-md ${isSel ? 'border-blue-500' : 'border-gray-100'}`}>
                                             <div className="flex justify-between items-start gap-2 mb-2">
                                                 <h3 className="font-bold text-gray-900 leading-tight flex-1 text-sm">{job.intitule}</h3>
-                                                <span className={`${badgeColor} text-[10px] uppercase tracking-wide px-2 py-1 rounded font-bold whitespace-nowrap`}>{isSim ? 'PROCHE' : (job.typeContrat || 'CDI')}</span>
+                                                <button onClick={(e) => toggleFavorite(job, e)} className="text-xl transition transform hover:scale-110">
+                                                    <i className={`${isFav ? 'fas text-pink-500' : 'far text-gray-300 hover:text-pink-300'} fa-heart`}></i>
+                                                </button>
                                             </div>
-                                            <p className="text-sm text-gray-600 font-medium mb-3 flex items-center gap-1"><i className="fas fa-briefcase text-gray-400"></i> {job.entreprise?.nom}</p>
-                                            <div className="space-y-1.5 text-xs text-gray-500 mb-3">
-                                                <div className="flex items-center gap-2"><i className="fas fa-map-marker-alt"></i> <span>{job.lieuTravail?.libelle}</span></div>
+                                            <p className="text-sm text-gray-600 font-medium mb-3"><i className="far fa-building text-gray-400 mr-1"></i> {job.entreprise?.nom || 'Entreprise non précisée'}</p>
+                                            
+                                            <div className="flex flex-wrap gap-1.5 mb-3">
+                                                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-100">{job.typeContrat || 'CDI'}</span>
+                                                {job.teletravailPossible && <span className="bg-green-50 text-green-700 text-[10px] px-2 py-0.5 rounded border border-green-200"><i className="fas fa-house-user"></i> Télétravail</span>}
                                             </div>
+
+                                            <div className="text-xs text-gray-500 mb-3 flex items-center gap-2"><i className="fas fa-map-marker-alt"></i> <span>{job.lieuTravail?.libelle}</span></div>
+                                            
                                             {estimatedDuration && (
-                                                <div className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg inline-flex items-center gap-2 border ${transportMode === 'driving' ? 'bg-blue-50/80 text-blue-800 border-blue-100' : transportMode === 'transit' ? 'bg-purple-50/80 text-purple-800 border-purple-100' : 'bg-green-50/80 text-green-800 border-green-100'}`}>
-                                                    {transportMode === 'driving' && <i className="fas fa-car"></i>}
-                                                    {transportMode === 'transit' && <i className="fas fa-bus"></i>}
-                                                    {transportMode === 'cycling' && <i className="fas fa-bicycle"></i>}
+                                                <div className={`text-xs font-semibold px-2 py-1 rounded-lg inline-flex items-center gap-1.5 border ${transportMode === 'driving' ? 'bg-blue-50/80 text-blue-800 border-blue-100' : transportMode === 'transit' ? 'bg-purple-50/80 text-purple-800 border-purple-100' : 'bg-green-50/80 text-green-800 border-green-100'}`}>
+                                                    <i className={`fas ${transportMode === 'driving' ? 'fa-car' : transportMode === 'transit' ? 'fa-bus' : 'fa-bicycle'}`}></i>
                                                     {formatTime(estimatedDuration)}
-                                                    <span className="opacity-60 font-medium font-normal hidden sm:inline">(~ {route.distanceKm} km)</span>
                                                 </div>
                                             )}
                                         </div>
                                     );
                                 })
                             )}
+                            
+                            {/* BOUTON CHARGER PLUS (Pagination) */}
+                            {viewMode === 'search' && hasMore && displayJobs.length > 0 && (
+                                <button onClick={() => handleSearch(true)} className="w-full bg-gray-50 hover:bg-gray-100 text-blue-600 font-bold py-3 rounded-xl border border-gray-200 transition mt-4" disabled={isSearching}>
+                                    {isSearching ? <i className="fas fa-spinner fa-spin"></i> : 'Charger plus d\'offres'}
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    {selectedJob && (
-                        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] w-[90%] max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-200 p-5 hidden md:block">
-                            <button onClick={() => setSelectedJob(null)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-700 bg-gray-100 rounded-full w-6 h-6 flex items-center justify-center"><i className="fas fa-times"></i></button>
-                            {selectedJob.isSimilar && <div className="text-[10px] uppercase font-bold text-orange-600 bg-orange-50 inline-block px-2 py-0.5 rounded mb-2">Compétence similaire</div>}
-                            <h3 className="font-bold text-base pr-6 mb-1 leading-tight">{selectedJob.intitule}</h3>
-                            <p className="text-blue-600 font-semibold text-sm mb-2">{selectedJob.entreprise?.nom}</p>
-                            <p className="text-xs text-gray-600 line-clamp-3 mb-4 leading-relaxed">{selectedJob.description}</p>
-                            <button onClick={() => window.open(`https://candidat.francetravail.fr/offres/recherche/detail/${selectedJob.id}`, '_blank')} className="w-full bg-gray-900 text-white py-2 rounded-xl text-sm font-medium hover:bg-black transition flex items-center justify-center gap-2">
-                                Détails de l'offre <i className="fas fa-external-link-alt"></i>
-                            </button>
+                    {/* --- PANNEAU DE DÉTAIL ENRICHI (Slide Over) --- */}
+                    {detailedJob && (
+                        <div className="fixed inset-0 z-[3000] flex justify-end bg-black bg-opacity-40 transition-opacity">
+                            <div className="bg-white w-full md:w-[600px] h-full shadow-2xl slide-in-right flex flex-col">
+                                
+                                {/* Header Detail */}
+                                <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-start sticky top-0 z-10">
+                                    <div className="flex-1 pr-4">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">{detailedJob.typeContrat}</span>
+                                            <span className="text-xs text-gray-500"><i className="far fa-clock"></i> Publiée le {new Date(detailedJob.dateCreation).toLocaleDateString('fr-FR')}</span>
+                                        </div>
+                                        <h2 className="text-xl font-bold text-gray-900 leading-tight mb-2">{detailedJob.intitule}</h2>
+                                        <p className="text-blue-600 font-bold flex items-center gap-2"><i className="far fa-building"></i> {detailedJob.entreprise?.nom || 'Entreprise confidentielle'}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={(e) => toggleFavorite(detailedJob, e)} className="w-10 h-10 rounded-full bg-white shadow flex items-center justify-center text-xl transition hover:scale-105">
+                                            <i className={`${favoriteJobs.some(f => f.id === detailedJob.id) ? 'fas text-pink-500' : 'far text-gray-300 hover:text-pink-300'} fa-heart`}></i>
+                                        </button>
+                                        <button onClick={() => {setDetailedJob(null); setSelectedJob(null);}} className="w-10 h-10 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 flex items-center justify-center transition">
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Body Detail */}
+                                <div className="p-6 overflow-y-auto flex-1 space-y-8">
+                                    
+                                    {/* Infos Clés */}
+                                    <div className="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                        <div><p className="text-xs text-blue-500 font-bold uppercase">Lieu de travail</p><p className="text-sm font-semibold">{detailedJob.lieuTravail?.libelle}</p></div>
+                                        <div><p className="text-xs text-blue-500 font-bold uppercase">Salaire</p><p className="text-sm font-semibold">{detailedJob.salaire?.libelle || 'Non précisé'}</p></div>
+                                        <div><p className="text-xs text-blue-500 font-bold uppercase">Expérience</p><p className="text-sm font-semibold">{detailedJob.experienceLibelle || 'Non précisée'}</p></div>
+                                        <div><p className="text-xs text-blue-500 font-bold uppercase">Secteur</p><p className="text-sm font-semibold">{detailedJob.secteurActivite || 'Non précisé'}</p></div>
+                                    </div>
+
+                                    {/* Description */}
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-align-left text-gray-400 mr-2"></i>Le Poste</h3>
+                                        <p className="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">{detailedJob.description}</p>
+                                    </div>
+
+                                    {/* Compétences */}
+                                    {detailedJob.competences && detailedJob.competences.length > 0 && (
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-tools text-gray-400 mr-2"></i>Compétences attendues</h3>
+                                        <div className="flex flex-wrap gap-2">
+                                            {detailedJob.competences.map((c, i) => (
+                                                <span key={i} className="bg-gray-100 border border-gray-200 text-gray-700 text-xs px-3 py-1.5 rounded-lg">{c.libelle}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    )}
+
+                                    {/* Entreprise & Contact */}
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-info-circle text-gray-400 mr-2"></i>L'Entreprise</h3>
+                                        {detailedJob.entreprise?.description && <p className="text-sm text-gray-600 italic mb-4">"{detailedJob.entreprise.description}"</p>}
+                                        
+                                        {detailedJob.contact ? (
+                                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                                <p className="text-sm font-bold text-gray-800 mb-1">Contact Recrutement</p>
+                                                <p className="text-sm text-gray-600">{detailedJob.contact.nom || 'Service RH'}</p>
+                                                {detailedJob.contact.coordonnees1 && <p className="text-sm text-blue-600 mt-1">{detailedJob.contact.coordonnees1}</p>}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-500">Postulez directement via la plateforme France Travail.</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Footer Detail (Bouton Postuler) */}
+                                <div className="p-4 border-t border-gray-200 bg-white">
+                                    <button onClick={() => window.open(`https://candidat.francetravail.fr/offres/recherche/detail/${detailedJob.id}`, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
+                                        Postuler sur France Travail <i className="fas fa-external-link-alt"></i>
+                                    </button>
+                                </div>
+
+                            </div>
                         </div>
                     )}
 
+                    {/* --- MODAL PARAMÈTRES --- */}
                     {showSettings && (
-                        <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black bg-opacity-50 p-4">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slide-in-bottom">
                                 <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> Configuration France Travail</h2>
+                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> Clés API France Travail</h2>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700"><i className="fas fa-times"></i></button>
                                 </div>
                                 <div className="p-5 space-y-4">
                                     <div className="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                        <span className="text-sm font-semibold text-blue-900">Activer l'API réelle</span>
+                                        <span className="text-sm font-semibold text-blue-900">Forcer l'API réelle</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" className="sr-only peer" checked={useRealApi} onChange={(e) => setUseRealApi(e.target.checked)}/>
                                             <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -528,12 +672,11 @@
                                     <div className={`space-y-3 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
                                         <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client ID</label><input type="text" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientId} onChange={(e) => setFtClientId(e.target.value)} placeholder="PAR_votrenom_..."/></div>
                                         <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client Secret</label><input type="password" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientSecret} onChange={(e) => setFtClientSecret(e.target.value)} placeholder="••••••••••••"/></div>
-                                        <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 text-[11px] text-amber-800 leading-tight"><i className="fas fa-exclamation-circle mr-1"></i><strong>Attention CORS :</strong> L'appel direct à l'authentification depuis le navigateur est souvent bloqué par France Travail.</div>
                                     </div>
                                 </div>
                                 <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
-                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-200 rounded-lg transition">Annuler</button>
-                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold shadow-md transition">Sauvegarder</button>
+                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition">Annuler</button>
+                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
                                 </div>
                             </div>
                         </div>
