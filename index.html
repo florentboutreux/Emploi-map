@@ -286,71 +286,42 @@
 
                 const targetPage = isLoadMore ? page + 1 : 0;
                 let fetchedJobs = [];
-
+const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com";
                 try {
                     if (useRealApi && ftClientId && ftClientSecret) {
-                        try {
-                            let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
-                            if (useCorsProxy) tokenUrl = `${customProxyUrl}${encodeURIComponent(tokenUrl)}`;
+                      try {
+            // On prépare les paramètres (mots clés, ville, etc.)
+            const searchParams = new URLSearchParams();
+            if (searchQuery) searchParams.append('motsCles', searchQuery);
+            if (filterContract) searchParams.append('typeContrat', filterContract);
+            if (filterExperience) searchParams.append('experience', filterExperience);
+            if (filterTime) searchParams.append('tempsPlein', filterTime);
+            if (filterRemote) searchParams.append('teletravailPossible', 'true');
+            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
+                searchParams.append('commune', currentHomeLatLng.cityCode);
+                searchParams.append('distance', maxDistance); 
+            }
+            const start = targetPage * 20;
+            const end = start + 19;
+            searchParams.append('range', `${start}-${end}`);
+            
+            // On appelle NOTRE serveur backend (qui se charge du Token et de France Travail)
+            const queryString = searchParams.toString();
+            const jobsUrl = `${MON_SERVEUR_BACKEND}${queryString ? '?' + queryString : ''}`;
+            
+            const jobsRes = await fetch(jobsUrl);
 
-                            const tokenParams = new URLSearchParams();
-                            tokenParams.append('grant_type', 'client_credentials');
-                            tokenParams.append('client_id', ftClientId);
-                            tokenParams.append('client_secret', ftClientSecret);
-                            tokenParams.append('scope', 'api_offresdemploiv2 o2dsoffre');
+            if (!jobsRes.ok) throw new Error(`Erreur du Backend: ${jobsRes.status}`);
+            
+            const jobsData = await jobsRes.json();
+            fetchedJobs = jobsData.resultats || [];
+            setHasMore(fetchedJobs.length === 20); 
 
-                            const tokenRes = await fetchWithRetry(tokenUrl, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                                body: tokenParams.toString()
-                            });
-
-                            if (!tokenRes.ok) throw new Error(`Erreur HTTP: ${tokenRes.status}`);
-                            const tokenData = await tokenRes.json();
-
-                            const searchParams = new URLSearchParams();
-                            if (searchQuery) searchParams.append('motsCles', searchQuery);
-                            if (filterContract) searchParams.append('typeContrat', filterContract);
-                            if (filterExperience) searchParams.append('experience', filterExperience);
-                            if (filterTime) searchParams.append('tempsPlein', filterTime);
-                            if (filterRemote) searchParams.append('teletravailPossible', 'true');
-                            
-                            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
-                                searchParams.append('commune', currentHomeLatLng.cityCode);
-                                searchParams.append('distance', maxDistance); 
-                            }
-
-                            const start = targetPage * 20;
-                            const end = start + 19;
-                            searchParams.append('range', `${start}-${end}`);
-                            
-                            const queryString = searchParams.toString();
-                            let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search${queryString ? '?' + queryString : ''}`;
-                            let jobsUrl = useCorsProxy ? `${customProxyUrl}${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
-                            
-                            const jobsRes = await fetchWithRetry(jobsUrl, {
-                                headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
-                            });
-
-                            if (jobsRes.status === 204) {
-                                fetchedJobs = [];
-                                setHasMore(false);
-                            } else if (!jobsRes.ok) throw new Error(`Erreur Offres: ${jobsRes.status}`);
-                            else {
-                                const jobsData = await jobsRes.json();
-                                fetchedJobs = jobsData.resultats || [];
-                                setHasMore(fetchedJobs.length === 20); 
-                            }
-                        } catch (error) {
-                            console.error("Erreur complète API France Travail:", error);
-                            // Alerte spécifique si 403
-                            if (error.message.includes('403')) {
-                                alert("⚠️ ACCÈS REFUSÉ (Erreur 403)\nFrance Travail a bloqué votre requête.\nVérifiez dans vos paramètres (icône engrenage) via l'outil de diagnostic la cause exacte (Droits manquants ou Proxy bloqué).\n\nBasculement sur les offres de démonstration.");
-                            } else {
-                                alert("⚠️ Connexion à l'API France Travail impossible.\nVérifiez l'outil de diagnostic dans les paramètres.\n\nBasculement sur les offres de démonstration.");
-                            }
-                            fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
-                        }
+        } catch (error) {
+            console.error("Erreur avec le serveur backend:", error);
+            alert("Erreur de connexion au serveur Backend. Vérifiez qu'il est bien démarré sur Render.com.");
+            fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
+        }
                     } else {
                         await new Promise(resolve => setTimeout(resolve, 500)); 
                         fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
