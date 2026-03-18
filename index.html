@@ -21,14 +21,11 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
-        /* Animation pour le panneau latéral de détail */
         @keyframes slideInRight {
             from { transform: translateX(100%); }
             to { transform: translateX(0); }
         }
         .slide-in-right { animation: slideInRight 0.3s ease-out forwards; }
-        
-        /* Personnalisation de la barre de défilement */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -42,71 +39,40 @@
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
         // =====================================================================
-        // 🔑 CONFIGURATION DE L'API FRANCE TRAVAIL
+        // 🔗 ADRESSE DE VOTRE SERVEUR BACKEND (Render.com)
         // =====================================================================
-        const DEFAULT_FT_CLIENT_ID = ""; // Ex: "PAR_votre_projet_..."
-        const DEFAULT_FT_CLIENT_SECRET = ""; // Ex: "a1b2c3d4-..."
+        const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
         // =====================================================================
 
-        // --- DONNÉES DE DÉMONSTRATION ENRICHIES ---
+        // --- DONNÉES DE DÉMONSTRATION ---
         const MOCK_JOBS = [
-            { id: "145ABCD", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION", description: "Startup innovante dans la GreenTech." }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: "2024-05-20T10:30:00.000Z", description: "Vous concevrez des architectures complexes. Maîtrise de React et Node.js exigée. Esprit d'équipe indispensable.", typeContrat: "CDI", natureContrat: "Contrat travail", experienceLibelle: "Expérience exigée de 2 An(s)", teletravailPossible: true, competences: [{libelle: "React JS"}, {libelle: "Node.js"}, {libelle: "Git"}], secteurActivite: "Édition de logiciels", contact: {nom: "Mme Dupont", coordonnees1: "recrutement@tech.fr"} },
-            { id: "145XYZA", intitule: "Ingénieur Système et Réseau (H/F)", entreprise: { nom: "GLOBAL NETWORKS" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "38000€ à 42000€" }, dateCreation: "2024-05-19T14:15:00.000Z", description: "Gestion des infrastructures cloud AWS et Azure.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "AWS"}, {libelle: "Réseaux TCP/IP"}], secteurActivite: "Télécommunications" },
-            { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: "2024-05-21T09:00:00.000Z", description: "Pilotage de projets web et méthodes agiles (Scrum).", typeContrat: "CDD", experienceLibelle: "Expérience exigée de 5 An(s)", teletravailPossible: true, competences: [{libelle: "Méthodes Agiles"}, {libelle: "Management"}], secteurActivite: "Conseil en systèmes informatiques" },
-            { id: "148SIMI", intitule: "Intégrateur Web HTML/CSS (H/F)", entreprise: { nom: "WEB AGENCY 93" }, lieuTravail: { libelle: "93 - MONTREUIL", latitude: 48.8623, longitude: 2.4412 }, salaire: { libelle: "30000€" }, dateCreation: "2024-05-22T09:00:00.000Z", description: "Intégration web responsive pixel perfect.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "HTML5"}, {libelle: "CSS3"}], secteurActivite: "Création de sites internet" }
+            { id: "145ABCD", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION", description: "Startup innovante." }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: new Date().toISOString(), description: "Vous concevrez des architectures complexes. Maîtrise de React et Node.js exigée.", typeContrat: "CDI", natureContrat: "Contrat travail", experienceLibelle: "Expérience exigée de 2 An(s)", teletravailPossible: true, competences: [{libelle: "React JS"}, {libelle: "Node.js"}, {libelle: "Git"}], secteurActivite: "Édition de logiciels", contact: {nom: "Mme Dupont", coordonnees1: "recrutement@tech.fr"} },
+            { id: "145XYZA", intitule: "Ingénieur Système et Réseau (H/F)", entreprise: { nom: "GLOBAL NETWORKS" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "38000€ à 42000€" }, dateCreation: new Date(Date.now() - 86400000).toISOString(), description: "Gestion des infrastructures cloud AWS et Azure.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "AWS"}, {libelle: "Réseaux TCP/IP"}], secteurActivite: "Télécommunications" },
+            { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: new Date(Date.now() - 172800000).toISOString(), description: "Pilotage de projets web et méthodes agiles (Scrum).", typeContrat: "CDD", experienceLibelle: "Expérience exigée de 5 An(s)", teletravailPossible: true, competences: [{libelle: "Méthodes Agiles"}], secteurActivite: "Conseil informatique" }
         ];
 
-        // --- GESTIONNAIRE DE REQUÊTES AVEC RÉESSAI (Gestion Quotas HTTP 429) ---
-        const fetchWithRetry = async (url, options, retries = 3) => {
-            try {
-                const res = await fetch(url, options);
-                if (res.status === 429 && retries > 0) {
-                    const retryAfter = parseInt(res.headers.get('Retry-After') || '2', 10);
-                    console.warn(`Quota API France Travail dépassé (429). Retentative dans ${retryAfter} secondes...`);
-                    await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-                    return fetchWithRetry(url, options, retries - 1);
-                }
-                return res;
-            } catch (error) {
-                throw error;
-            }
-        };
-
         function App() {
-            // --- ÉTATS GLOBAUX ---
             const [hasSearched, setHasSearched] = useState(false);
             const [jobs, setJobs] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [viewMode, setViewMode] = useState('search'); 
             
-            // --- AUTO-COMPLÉTION & GÉOGRAPHIE ---
             const [addressQuery, setAddressQuery] = useState('');
             const [addressSuggestions, setAddressSuggestions] = useState([]);
             const [isSuggesting, setIsSuggesting] = useState(false);
             const [homeLatLng, setHomeLatLng] = useState(null); 
             
-            // --- API & PARAMETRES ---
-            const [useRealApi, setUseRealApi] = useState(() => (localStorage.getItem('ft_use_real') === 'true' || DEFAULT_FT_CLIENT_ID !== ""));
-            const [useCorsProxy, setUseCorsProxy] = useState(() => localStorage.getItem('ft_use_cors_proxy') !== 'false');
-            const [customProxyUrl, setCustomProxyUrl] = useState(() => localStorage.getItem('ft_custom_proxy_url') || 'https://corsproxy.io/?');
-            const [ftClientId, setFtClientId] = useState(() => localStorage.getItem('ft_client_id') || DEFAULT_FT_CLIENT_ID);
-            const [ftClientSecret, setFtClientSecret] = useState(() => localStorage.getItem('ft_client_secret') || DEFAULT_FT_CLIENT_SECRET);
+            const [useRealApi, setUseRealApi] = useState(() => localStorage.getItem('ft_use_real') !== 'false');
             
-            // --- ETATS TEST API ---
-            const [isTestingApi, setIsTestingApi] = useState(false);
-            const [apiTestResult, setApiTestResult] = useState('');
-
             const [page, setPage] = useState(0);
             const [hasMore, setHasMore] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
 
-            // --- FAVORIS ---
             const [favoriteJobs, setFavoriteJobs] = useState(() => {
                 const saved = localStorage.getItem('ft_favorites');
                 return saved ? JSON.parse(saved) : [];
             });
 
-            // --- FILTRES AVANCÉS ---
             const [showFilters, setShowFilters] = useState(false);
             const [transportMode, setTransportMode] = useState('driving'); 
             const [maxDuration, setMaxDuration] = useState(45); 
@@ -119,7 +85,6 @@
 
             const [jobRoutes, setJobRoutes] = useState({}); 
 
-            // --- UI ---
             const [selectedJob, setSelectedJob] = useState(null); 
             const [detailedJob, setDetailedJob] = useState(null); 
             const [sortBy, setSortBy] = useState('duration');
@@ -203,77 +168,9 @@
                 return latLng;
             };
 
-            // --- FONCTION DE TEST API DÉDIÉE ---
-            const testApiConnection = async () => {
-                setIsTestingApi(true);
-                setApiTestResult('<i class="fas fa-spinner fa-spin"></i> Test en cours...');
-                try {
-                    let tokenUrl = 'https://entreprise.francetravail.fr/connexion/oauth2/access_token?realm=%2Fpartenaire';
-                    if (useCorsProxy) tokenUrl = `${customProxyUrl}${encodeURIComponent(tokenUrl)}`;
-
-                    const tokenParams = new URLSearchParams();
-                    tokenParams.append('grant_type', 'client_credentials');
-                    tokenParams.append('client_id', ftClientId);
-                    tokenParams.append('client_secret', ftClientSecret);
-                    tokenParams.append('scope', 'api_offresdemploiv2 o2dsoffre');
-
-                    const tokenRes = await fetch(tokenUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: tokenParams.toString()
-                    });
-
-                    if (!tokenRes.ok) {
-                        const status = tokenRes.status;
-                        if (status === 403) {
-                            setApiTestResult(`
-                                ❌ <b class="text-red-600">Erreur 403 (Accès Refusé)</b><br/><br/>
-                                <b>Cause 1 : Droits manquants (Très fréquent)</b><br/>
-                                Allez sur votre espace <i>francetravail.io</i> -> Votre application. Avez-vous bien cliqué sur "Souscrire à une API" et ajouté <b>Offres d'emploi v2</b> ?<br/><br/>
-                                <b>Cause 2 : Proxy bloqué</b><br/>
-                                Le pare-feu de France Travail bloque l'adresse IP du proxy public (${customProxyUrl}).<br/>
-                                <i>Solution : Essayez l'autre proxy dans la liste déroulante, ou créez votre propre serveur Backend (Node.js/PHP).</i>
-                            `);
-                        } else if (status === 400 || status === 401) {
-                            setApiTestResult(`❌ <b>Erreur ${status} (Non autorisé)</b><br/>Vos identifiants (Client ID / Secret) sont incorrects ou mal recopiés.`);
-                        } else {
-                            setApiTestResult(`❌ <b>Erreur ${status}</b><br/>Échec inattendu de l'authentification.`);
-                        }
-                        setIsTestingApi(false);
-                        return;
-                    }
-                    
-                    const tokenData = await tokenRes.json();
-                    
-                    let jobsUrlBase = `https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search?motsCles=test&range=0-1`;
-                    let jobsUrl = useCorsProxy ? `${customProxyUrl}${encodeURIComponent(jobsUrlBase)}` : jobsUrlBase;
-                    
-                    const jobsRes = await fetch(jobsUrl, {
-                        headers: { Authorization: `Bearer ${tokenData.access_token}`, Accept: 'application/json' }
-                    });
-
-                    if (!jobsRes.ok) {
-                        if (jobsRes.status === 403) {
-                            setApiTestResult(`❌ <b>Token OK, mais Recherche 403 (Refusée)</b><br/>Vous avez un token, mais pas l'autorisation d'utiliser l'API "Offres". Vérifiez vos souscriptions sur francetravail.io.`);
-                        } else {
-                            setApiTestResult(`❌ <b>Auth OK, mais Recherche KO (Code ${jobsRes.status})</b>`);
-                        }
-                    } else {
-                        setApiTestResult(`✅ <b>Succès !</b><br/>L'API France Travail communique parfaitement avec l'application.`);
-                    }
-                } catch (err) {
-                    setApiTestResult(`
-                        ❌ <b class="text-red-600">Erreur Réseau (CORS)</b><br/><br/>
-                        <b>Détail :</b> ${err.message}<br/><br/>
-                        Le navigateur interdit d'appeler directement France Travail pour des raisons de sécurité.<br/>
-                        Si l'option Proxy est cochée et que vous avez cette erreur, c'est que le Proxy est hors-service ou bloqué. 
-                        <b>Pour une vraie application en production, un serveur Backend est obligatoire.</b>
-                    `);
-                }
-                setIsTestingApi(false);
-            };
-
-            // --- MOTEUR DE RECHERCHE PRINCIPAL ---
+            // =================================================================
+            // MOTEUR DE RECHERCHE (APPEL AU BACKEND RENDER)
+            // =================================================================
             const handleSearch = async (isLoadMore = false) => {
                 if (isSearching) return;
                 setIsSearching(true);
@@ -286,47 +183,51 @@
 
                 const targetPage = isLoadMore ? page + 1 : 0;
                 let fetchedJobs = [];
-const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
+
                 try {
-                    if (useRealApi && ftClientId && ftClientSecret) {
-                      try {
-            // On prépare les paramètres (mots clés, ville, etc.)
-            const searchParams = new URLSearchParams();
-            if (searchQuery) searchParams.append('motsCles', searchQuery);
-            if (filterContract) searchParams.append('typeContrat', filterContract);
-            if (filterExperience) searchParams.append('experience', filterExperience);
-            if (filterTime) searchParams.append('tempsPlein', filterTime);
-            if (filterRemote) searchParams.append('teletravailPossible', 'true');
-            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
-                searchParams.append('commune', currentHomeLatLng.cityCode);
-                searchParams.append('distance', maxDistance); 
-            }
-            const start = targetPage * 20;
-            const end = start + 19;
-            searchParams.append('range', `${start}-${end}`);
-            
-            // On appelle NOTRE serveur backend (qui se charge du Token et de France Travail)
-            const queryString = searchParams.toString();
-            const jobsUrl = `${MON_SERVEUR_BACKEND}${queryString ? '?' + queryString : ''}`;
-            
-            const jobsRes = await fetch(jobsUrl);
+                    if (useRealApi) {
+                        try {
+                            const searchParams = new URLSearchParams();
+                            if (searchQuery) searchParams.append('motsCles', searchQuery);
+                            if (filterContract) searchParams.append('typeContrat', filterContract);
+                            if (filterExperience) searchParams.append('experience', filterExperience);
+                            if (filterTime) searchParams.append('tempsPlein', filterTime);
+                            if (filterRemote) searchParams.append('teletravailPossible', 'true');
+                            
+                            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
+                                searchParams.append('commune', currentHomeLatLng.cityCode);
+                                searchParams.append('distance', maxDistance); 
+                            }
 
-            if (!jobsRes.ok) throw new Error(`Erreur du Backend: ${jobsRes.status}`);
-            
-            const jobsData = await jobsRes.json();
-            fetchedJobs = jobsData.resultats || [];
-            setHasMore(fetchedJobs.length === 20); 
+                            const start = targetPage * 20;
+                            const end = start + 19;
+                            searchParams.append('range', `${start}-${end}`);
+                            
+                            const queryString = searchParams.toString();
+                            const jobsUrl = `${MON_SERVEUR_BACKEND}${queryString ? '?' + queryString : ''}`;
+                            
+                            const jobsRes = await fetch(jobsUrl);
 
-        } catch (error) {
-            console.error("Erreur avec le serveur backend:", error);
-            alert("Erreur de connexion au serveur Backend. Vérifiez qu'il est bien démarré sur Render.com.");
-            fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
-        }
+                            if (!jobsRes.ok) {
+                                const errorText = await jobsRes.text();
+                                throw new Error(`Erreur du Backend (${jobsRes.status}): ${errorText}`);
+                            }
+                            
+                            const jobsData = await jobsRes.json();
+                            fetchedJobs = jobsData.resultats || [];
+                            setHasMore(fetchedJobs.length === 20); 
+
+                        } catch (error) {
+                            console.error("Erreur complète :", error);
+                            alert("⚠️ Connexion à votre Serveur Backend impossible.\n\nAssurez-vous que votre serveur est bien en ligne sur Render.com et qu'il n'est pas en veille (les serveurs gratuits mettent parfois 1 minute à se réveiller).\n\nL'application passe sur les données de démonstration.");
+                            fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
+                        }
                     } else {
                         await new Promise(resolve => setTimeout(resolve, 500)); 
                         fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                     }
 
+                    // Calcul OSRM pour les durées de trajet
                     if (currentHomeLatLng && fetchedJobs.length > 0) {
                         const newRoutes = { ...jobRoutes };
                         await Promise.all(fetchedJobs.map(async (job) => {
@@ -370,9 +271,9 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                 if (targetPage > 0) { setHasMore(false); return []; } 
                 setHasMore(false);
                 return MOCK_JOBS.filter(job => 
-                    (job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || job.description.toLowerCase().includes(searchQuery.toLowerCase())) &&
+                    (job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || (job.description && job.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
                     (filterContract === '' || job.typeContrat.includes(filterContract)) &&
-                    (filterExperience === '' || job.experienceLibelle.includes(filterExperience === '1' ? 'Débutant' : 'exigée')) &&
+                    (filterExperience === '' || (job.experienceLibelle && job.experienceLibelle.includes(filterExperience === '1' ? 'Débutant' : 'exigée'))) &&
                     (!filterRemote || job.teletravailPossible === true)
                 );
             };
@@ -543,7 +444,7 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
 
                                     <div className="flex flex-col gap-3">
                                         <div className="flex justify-between items-center">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rayon (API France Travail)</label>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Rayon de recherche (Km)</label>
                                             <span className="text-xs font-bold text-gray-700">{maxDistance} km</span>
                                         </div>
                                         <input type="range" min="5" max="100" step="5" value={maxDistance} onChange={(e) => setMaxDistance(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-600 disabled:opacity-50"/>
@@ -554,7 +455,7 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                             <button onClick={() => setTransportMode('cycling')} className={`flex-1 py-1 text-xs rounded-lg transition ${transportMode === 'cycling' ? 'bg-green-100 text-green-700 font-bold' : 'text-gray-500'}`}><i className="fas fa-bicycle mr-1"></i> Vélo</button>
                                         </div>
                                         <div className="flex justify-between items-end mt-2">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Trajet Local Max.</label>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Temps de trajet Max.</label>
                                             <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{maxDuration === 120 ? 'Illimité' : formatTime(maxDuration)}</span>
                                         </div>
                                         <input type="range" min="10" max="120" step="5" value={maxDuration} onChange={(e) => setMaxDuration(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"/>
@@ -619,7 +520,6 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                 })
                             )}
                             
-                            {/* BOUTON CHARGER PLUS (Pagination) */}
                             {viewMode === 'search' && hasMore && displayJobs.length > 0 && (
                                 <button onClick={() => handleSearch(true)} className="w-full bg-gray-50 hover:bg-gray-100 text-blue-600 font-bold py-3 rounded-xl border border-gray-200 transition mt-4" disabled={isSearching}>
                                     {isSearching ? <i className="fas fa-spinner fa-spin"></i> : 'Charger plus d\'offres'}
@@ -633,7 +533,6 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                         <div className="fixed inset-0 z-[3000] flex justify-end bg-black bg-opacity-40 transition-opacity">
                             <div className="bg-white w-full md:w-[600px] h-full shadow-2xl slide-in-right flex flex-col">
                                 
-                                {/* Header Detail */}
                                 <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-start sticky top-0 z-10">
                                     <div className="flex-1 pr-4">
                                         <div className="flex items-center gap-3 mb-2">
@@ -653,10 +552,8 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                     </div>
                                 </div>
 
-                                {/* Body Detail */}
                                 <div className="p-6 overflow-y-auto flex-1 space-y-8">
                                     
-                                    {/* Infos Clés */}
                                     <div className="grid grid-cols-2 gap-4 bg-blue-50 p-4 rounded-xl border border-blue-100">
                                         <div><p className="text-xs text-blue-500 font-bold uppercase">Lieu de travail</p><p className="text-sm font-semibold">{detailedJob.lieuTravail?.libelle}</p></div>
                                         <div><p className="text-xs text-blue-500 font-bold uppercase">Salaire</p><p className="text-sm font-semibold">{detailedJob.salaire?.libelle || 'Non précisé'}</p></div>
@@ -664,13 +561,11 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                         <div><p className="text-xs text-blue-500 font-bold uppercase">Secteur</p><p className="text-sm font-semibold">{detailedJob.secteurActivite || 'Non précisé'}</p></div>
                                     </div>
 
-                                    {/* Description */}
                                     <div>
                                         <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-align-left text-gray-400 mr-2"></i>Le Poste</h3>
                                         <p className="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">{detailedJob.description}</p>
                                     </div>
 
-                                    {/* Compétences */}
                                     {detailedJob.competences && detailedJob.competences.length > 0 && (
                                     <div>
                                         <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-tools text-gray-400 mr-2"></i>Compétences attendues</h3>
@@ -682,7 +577,6 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                     </div>
                                     )}
 
-                                    {/* Entreprise & Contact */}
                                     <div>
                                         <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-info-circle text-gray-400 mr-2"></i>L'Entreprise</h3>
                                         {detailedJob.entreprise?.description && <p className="text-sm text-gray-600 italic mb-4">"{detailedJob.entreprise.description}"</p>}
@@ -699,7 +593,6 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                                     </div>
                                 </div>
 
-                                {/* Footer Detail (Bouton Postuler) */}
                                 <div className="p-4 border-t border-gray-200 bg-white">
                                     <button onClick={() => window.open(`https://candidat.francetravail.fr/offres/recherche/detail/${detailedJob.id}`, '_blank')} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform hover:-translate-y-0.5 flex justify-center items-center gap-2">
                                         Postuler sur France Travail <i className="fas fa-external-link-alt"></i>
@@ -710,79 +603,34 @@ const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
                         </div>
                     )}
 
-                    {/* --- MODAL PARAMÈTRES (AVEC TESTEUR INTÉGRÉ) --- */}
+                    {/* --- MODAL PARAMÈTRES (ÉPURÉ POUR LE BACKEND) --- */}
                     {showSettings && (
                         <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-slide-in-bottom">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-slide-in-bottom">
                                 <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-cog"></i> Configuration & Diagnostic API</h2>
+                                    <h2 className="font-bold text-gray-800 flex items-center gap-2"><i className="fas fa-server"></i> Configuration Serveur</h2>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700"><i className="fas fa-times"></i></button>
                                 </div>
-                                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-                                    
-                                    {/* Bloc Activation */}
+                                <div className="p-5 space-y-4">
                                     <div className="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-100">
-                                        <span className="text-sm font-semibold text-blue-900">Activer l'API France Travail</span>
+                                        <span className="text-sm font-semibold text-blue-900">Activer le Serveur Réel</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" className="sr-only peer" checked={useRealApi} onChange={(e) => setUseRealApi(e.target.checked)}/>
                                             <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </div>
-                                    
-                                    <div className={`space-y-4 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
-                                        
-                                        {/* Identifiants */}
-                                        <div className="space-y-3">
-                                            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client ID</label><input type="text" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientId} onChange={(e) => setFtClientId(e.target.value)} placeholder="PAR_votrenom_..."/></div>
-                                            <div><label className="block text-xs font-semibold text-gray-600 mb-1">Client Secret</label><input type="password" className="w-full text-sm bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 outline-none focus:border-blue-500" value={ftClientSecret} onChange={(e) => setFtClientSecret(e.target.value)} placeholder="••••••••••••"/></div>
-                                        </div>
-
-                                        {/* Option de contournement CORS */}
-                                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <span className="text-sm font-bold text-gray-800 block">Proxy CORS (Développement)</span>
-                                                    <span className="text-[10px] text-gray-500 block leading-tight">France Travail bloque les requêtes directes. Un proxy tente de contourner cela.</span>
-                                                </div>
-                                                <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" className="sr-only peer" checked={useCorsProxy} onChange={(e) => setUseCorsProxy(e.target.checked)}/>
-                                                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gray-800"></div>
-                                                </label>
-                                            </div>
-                                            {useCorsProxy && (
-                                                <div>
-                                                    <label className="block text-[10px] font-semibold text-gray-500 mb-1">URL du Proxy</label>
-                                                    <select value={customProxyUrl} onChange={(e) => setCustomProxyUrl(e.target.value)} className="w-full text-xs bg-white border border-gray-200 rounded-lg py-1.5 px-2 outline-none">
-                                                        <option value="https://corsproxy.io/?">Proxy 1 (corsproxy.io)</option>
-                                                        <option value="https://api.allorigins.win/raw?url=">Proxy 2 (allorigins.win)</option>
-                                                    </select>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Outil de Diagnostic */}
-                                        <div className="border border-indigo-100 bg-indigo-50 rounded-xl p-4">
-                                            <h3 className="text-sm font-bold text-indigo-900 mb-2"><i className="fas fa-stethoscope mr-1"></i> Outil de Diagnostic</h3>
-                                            <p className="text-[11px] text-indigo-700 mb-3 leading-tight">Cliquez ci-dessous pour tester votre Client ID et vérifier exactement où la requête est bloquée.</p>
-                                            
-                                            <button onClick={testApiConnection} disabled={isTestingApi || !ftClientId || !ftClientSecret} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-lg shadow transition disabled:opacity-50">
-                                                Lancer le test de connexion
-                                            </button>
-
-                                            {apiTestResult && (
-                                                <div className="mt-3 p-2 bg-white border border-indigo-100 rounded text-xs text-gray-700 font-mono" dangerouslySetInnerHTML={{__html: apiTestResult}}></div>
-                                            )}
-                                        </div>
-
-                                        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 text-[11px] text-yellow-800 leading-tight">
-                                            <i className="fas fa-exclamation-triangle mr-1 text-yellow-600"></i><strong>À savoir pour la Production :</strong><br/>
-                                            Même avec un proxy, cette méthode reste expérimentale. Pour un site en ligne définitif, vous devrez faire la demande de token sur votre propre serveur (NodeJS/PHP).
-                                        </div>
+                                    <div className="bg-green-50 p-3 rounded-lg border border-green-200 text-[11px] text-green-800 leading-tight">
+                                        <i className="fas fa-shield-alt mr-1 text-green-600"></i><strong>Sécurité renforcée :</strong><br/>
+                                        L'application discute désormais avec votre propre serveur Node.js hébergé sur Render.com.
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 font-mono bg-gray-100 p-2 rounded">
+                                        Serveur configuré :<br/>
+                                        {MON_SERVEUR_BACKEND}
                                     </div>
                                 </div>
                                 <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
                                     <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:bg-gray-200 rounded-lg transition">Fermer</button>
-                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_use_cors_proxy', useCorsProxy); localStorage.setItem('ft_custom_proxy_url', customProxyUrl); localStorage.setItem('ft_client_id', ftClientId); localStorage.setItem('ft_client_secret', ftClientSecret); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
+                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); setShowSettings(false); }} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md transition">Sauvegarder</button>
                                 </div>
                             </div>
                         </div>
