@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Recherche Emploi Map - PRO</title>
+    <title>Recherche Emploi Map - Multi-Sources</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- FontAwesome -->
+    <!-- FontAwesome pour les icônes -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Leaflet -->
+    <!-- Leaflet pour la carte -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
@@ -24,9 +24,11 @@
         /* Animations fluides */
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
         @keyframes slideInBottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         
         .slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
         .slide-in-bottom { animation: slideInBottom 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        .fade-in-down { animation: fadeInDown 0.4s ease-out forwards; }
         
         /* Personnalisation Scrollbar */
         ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -40,7 +42,6 @@
             -webkit-backdrop-filter: blur(10px);
         }
 
-        /* Enlever le focus outline sur mobile */
         input:focus, button:focus, select:focus { outline: none; }
     </style>
 </head>
@@ -50,45 +51,54 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
-        // =====================================================================
-        // 🔗 ADRESSE DE VOTRE SERVEUR BACKEND (Render.com)
-        // =====================================================================
-        const MON_SERVEUR_BACKEND = "https://emploi-map-backend.onrender.com/api/jobs";
-        // =====================================================================
-
-        // --- DONNÉES DE DÉMONSTRATION (Mocks) ---
+        // --- DONNÉES DE DÉMONSTRATION (Mock) ---
         const MOCK_JOBS = [
-            { id: "145ABCD", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION", description: "Startup innovante." }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: new Date().toISOString(), description: "Vous concevrez des architectures complexes. Maîtrise de React et Node.js exigée.", typeContrat: "CDI", natureContrat: "Contrat travail", experienceLibelle: "Exp. exigée de 2 An(s)", teletravailPossible: true, competences: [{libelle: "React JS"}, {libelle: "Node.js"}], secteurActivite: "Édition de logiciels", contact: {nom: "Mme Dupont"} },
-            { id: "145XYZA", intitule: "Ingénieur Système et Réseau (H/F)", entreprise: { nom: "GLOBAL NETWORKS" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "38000€ à 42000€" }, dateCreation: new Date(Date.now() - 86400000).toISOString(), description: "Gestion des infrastructures cloud AWS et Azure.", typeContrat: "CDI", experienceLibelle: "Débutant accepté", teletravailPossible: false, competences: [{libelle: "AWS"}, {libelle: "Réseaux"}], secteurActivite: "Télécommunications" },
-            { id: "146BQWE", intitule: "Chef de Projet IT (H/F)", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3000€ à 3500€ mensuel" }, dateCreation: new Date(Date.now() - 172800000).toISOString(), description: "Pilotage de projets web et méthodes agiles (Scrum).", typeContrat: "CDD", experienceLibelle: "Exp. exigée de 5 An(s)", teletravailPossible: true, competences: [{libelle: "Méthodes Agiles"}], secteurActivite: "Conseil informatique" }
+            { id: "FT1", intitule: "Développeur Full-Stack (H/F)", entreprise: { nom: "TECH INNOVATION" }, lieuTravail: { libelle: "75 - PARIS 08", latitude: 48.8738, longitude: 2.3116 }, salaire: { libelle: "45000€ à 55000€" }, dateCreation: new Date().toISOString(), description: "Vous concevrez des architectures complexes. Maîtrise de React et Node.js exigée.", typeContrat: "CDI", experienceLibelle: "Exp. exigée de 2 An(s)", teletravailPossible: true, source: "France Travail" },
+            { id: "JB1", intitule: "Data Scientist Senior", entreprise: { nom: "DATA CORP GLOBAL (via Jobijoba)" }, lieuTravail: { libelle: "92 - LA DEFENSE", latitude: 48.8924, longitude: 2.2370 }, salaire: { libelle: "Non précisé" }, dateCreation: new Date(Date.now() - 3600000).toISOString(), description: "Rejoignez notre équipe IA. Modélisation prédictive et Machine Learning.", typeContrat: "CDI", experienceLibelle: "Senior (+5 ans)", teletravailPossible: true, source: "Jobijoba" },
+            { id: "FT2", intitule: "Chef de Projet Marketing Digital", entreprise: { nom: "AGENCE DIGITALE" }, lieuTravail: { libelle: "75 - PARIS 11", latitude: 48.8629, longitude: 2.3800 }, salaire: { libelle: "3500€ mensuel" }, dateCreation: new Date(Date.now() - 86400000).toISOString(), description: "Pilotage de campagnes digitales 360.", typeContrat: "CDD", experienceLibelle: "Exp. 3 An(s)", teletravailPossible: false, source: "France Travail" },
         ];
 
+        // Configuration visuelle des sources
+        const getSourceConfig = (source) => {
+            switch(source) {
+                case 'Jobijoba': return { icon: 'fas fa-briefcase', colorClass: 'text-orange-700 bg-orange-50 border-orange-200' };
+                case 'Remotive': return { icon: 'fas fa-globe', colorClass: 'text-teal-700 bg-teal-50 border-teal-200' };
+                case 'LinkedIn': return { icon: 'fab fa-linkedin', colorClass: 'text-blue-700 bg-blue-50 border-blue-200' };
+                case 'France Travail': return { icon: 'fas fa-building', colorClass: 'text-blue-900 bg-blue-100 border-blue-300' };
+                default: return { icon: 'fas fa-briefcase', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
+            }
+        };
+
         function App() {
-            // --- ETATS RESPONSIVE ---
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-            
             useEffect(() => {
                 const handleResize = () => setIsMobile(window.innerWidth < 768);
                 window.addEventListener('resize', handleResize);
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
 
-            // --- ETATS GLOBAUX ---
             const [hasSearched, setHasSearched] = useState(false);
             const [jobs, setJobs] = useState([]);
             const [searchQuery, setSearchQuery] = useState('');
             const [viewMode, setViewMode] = useState('search'); 
+            const [errorMsg, setErrorMsg] = useState(null); // Gestion des erreurs visuelles
             
             const [addressQuery, setAddressQuery] = useState('');
             const [addressSuggestions, setAddressSuggestions] = useState([]);
             const [isSuggesting, setIsSuggesting] = useState(false);
             const [homeLatLng, setHomeLatLng] = useState(null); 
             
+            // --- ETATS CONFIGURATION SERVEUR ---
             const [useRealApi, setUseRealApi] = useState(() => localStorage.getItem('ft_use_real') !== 'false');
+            const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('ft_backend_url') || "https://emploi-map-backend.onrender.com/api/jobs");
             
             const [page, setPage] = useState(0);
             const [hasMore, setHasMore] = useState(false);
             const [isSearching, setIsSearching] = useState(false);
+            const [isSearchExpanded, setIsSearchExpanded] = useState(true);
+
+            const [isTestingBackend, setIsTestingBackend] = useState(false);
+            const [backendTestResult, setBackendTestResult] = useState('');
 
             const [favoriteJobs, setFavoriteJobs] = useState(() => {
                 const saved = localStorage.getItem('ft_favorites');
@@ -103,6 +113,7 @@
             const [filterContract, setFilterContract] = useState(''); 
             const [filterExperience, setFilterExperience] = useState(''); 
             const [filterRemote, setFilterRemote] = useState(false);
+            const [filterSource, setFilterSource] = useState(''); 
 
             const [jobRoutes, setJobRoutes] = useState({}); 
 
@@ -120,6 +131,14 @@
             const suggestionBoxRef = useRef(null);
 
             useEffect(() => { localStorage.setItem('ft_favorites', JSON.stringify(favoriteJobs)); }, [favoriteJobs]);
+
+            // Auto-hide du message d'erreur
+            useEffect(() => {
+                if (errorMsg) {
+                    const timer = setTimeout(() => setErrorMsg(null), 8000);
+                    return () => clearTimeout(timer);
+                }
+            }, [errorMsg]);
 
             const toggleFavorite = (job, e) => {
                 e.stopPropagation();
@@ -143,9 +162,12 @@
                 setIsMapLoaded(true);
             }, [isMobile]);
 
-            const createCustomIcon = (type, isSelected = false) => {
+            const createCustomIcon = (type, source = '', isSelected = false) => {
                 if (!window.L) return null;
-                let color = '#2563eb'; 
+                let color = '#1e3a8a'; // Par défaut
+                if (source === 'Jobijoba') color = '#c2410c';
+                if (source === 'Remotive') color = '#0f766e';
+                
                 if (type === 'home') color = '#16a34a'; 
                 else if (isSelected) color = '#dc2626'; 
                 else if (type === 'favorite') color = '#ec4899'; 
@@ -175,7 +197,7 @@
                 setAddressSuggestions([]);
                 setIsSuggesting(false);
                 const coords = feature.geometry.coordinates;
-                const latLng = { lat: coords[1], lng: coords[0], cityCode: feature.properties.citycode };
+                const latLng = { lat: coords[1], lng: coords[0], cityCode: feature.properties.citycode, villeNom: feature.properties.city };
                 setHomeLatLng(latLng);
                 
                 if (homeMarkerRef.current) homeMarkerRef.current.remove();
@@ -186,31 +208,48 @@
                 return latLng;
             };
 
-            // --- GESTION DU RECENTRAGE DYNAMIQUE DE LA CARTE ---
             const updateMapBounds = useCallback((boundsToFit) => {
                 if (!mapInstanceRef.current || !boundsToFit.isValid()) return;
-                
-                // Décalages (padding) pour ne pas cacher les points sous les panneaux (Recherche en haut, Liste en bas/gauche)
                 let ptTopLeft, ptBottomRight;
                 
                 if (isMobile) {
-                    // Mobile : Barre de recherche prend ~160px en haut. Liste des offres prend ~45vh en bas.
-                    ptTopLeft = [10, showFilters ? 350 : 160];
+                    const topPadding = (hasSearched && !isSearchExpanded) ? 80 : (showFilters ? 400 : 200);
+                    ptTopLeft = [10, topPadding];
                     ptBottomRight = [10, hasSearched ? window.innerHeight * 0.45 : 20];
                 } else {
-                    // Desktop : Panneau latéral gauche prend ~420px. Search bar centrée en haut (~100px).
                     ptTopLeft = [hasSearched ? 450 : 50, hasSearched ? 100 : 50];
                     ptBottomRight = [50, 50];
                 }
                 
                 mapInstanceRef.current.fitBounds(boundsToFit, { paddingTopLeft: ptTopLeft, paddingBottomRight: ptBottomRight });
-            }, [isMobile, hasSearched, showFilters]);
+            }, [isMobile, hasSearched, showFilters, isSearchExpanded]);
+
+            // --- TEST DU SERVEUR ---
+            const testBackendConnection = async () => {
+                setIsTestingBackend(true);
+                setBackendTestResult('<i class="fas fa-spinner fa-spin"></i> Test du serveur en cours (peut prendre 1 min si le serveur sort de veille)...');
+                
+                try {
+                    const res = await fetch(`${backendUrl}?motsCles=test`);
+                    if (!res.ok) {
+                        const text = await res.text();
+                        if (res.status === 404) setBackendTestResult(`❌ <b>Erreur 404</b><br/>Adresse incorrecte. Avez-vous bien ajouté <code>/api/jobs</code> ?`);
+                        else setBackendTestResult(`❌ <b>Erreur ${res.status}</b><br/>Détail : <i>${text}</i>`);
+                    } else {
+                        setBackendTestResult(`✅ <b>Succès !</b><br/>Le serveur Backend est en ligne et communique correctement.`);
+                    }
+                } catch (err) {
+                    setBackendTestResult(`❌ <b>Erreur Réseau</b><br/>Serveur introuvable ou en veille profonde. Vérifiez l'URL.`);
+                }
+                setIsTestingBackend(false);
+            };
 
             // --- MOTEUR DE RECHERCHE ---
             const handleSearch = async (isLoadMore = false) => {
                 if (isSearching) return;
                 setIsSearching(true);
                 setViewMode('search');
+                setErrorMsg(null); // Reset erreur
 
                 let currentHomeLatLng = homeLatLng;
                 if (addressQuery && !currentHomeLatLng && addressSuggestions.length > 0) {
@@ -228,25 +267,36 @@
                             if (filterContract) searchParams.append('typeContrat', filterContract);
                             if (filterExperience) searchParams.append('experience', filterExperience);
                             if (filterRemote) searchParams.append('teletravailPossible', 'true');
-                            if (currentHomeLatLng && currentHomeLatLng.cityCode) {
-                                searchParams.append('commune', currentHomeLatLng.cityCode);
+                            if (filterSource) searchParams.append('source', filterSource);
+                            
+                            // Paramètres géographiques (INSEE pour FT, Nom pour RSS)
+                            if (currentHomeLatLng) {
+                                if (currentHomeLatLng.cityCode) searchParams.append('commune', currentHomeLatLng.cityCode);
+                                if (currentHomeLatLng.villeNom) searchParams.append('villeNom', currentHomeLatLng.villeNom);
                                 searchParams.append('distance', maxDistance); 
                             }
+
                             const start = targetPage * 20;
                             const end = start + 19;
                             searchParams.append('range', `${start}-${end}`);
                             
-                            const jobsUrl = `${MON_SERVEUR_BACKEND}?${searchParams.toString()}`;
+                            const queryString = searchParams.toString();
+                            const jobsUrl = `${backendUrl}${queryString ? '?' + queryString : ''}`;
+                            
                             const jobsRes = await fetch(jobsUrl);
 
-                            if (!jobsRes.ok) throw new Error(`Erreur Backend (${jobsRes.status})`);
+                            if (!jobsRes.ok) {
+                                const errorText = await jobsRes.text();
+                                throw new Error(`Erreur du Backend (${jobsRes.status}): ${errorText}`);
+                            }
+                            
                             const jobsData = await jobsRes.json();
                             fetchedJobs = jobsData.resultats || [];
                             setHasMore(fetchedJobs.length === 20); 
 
                         } catch (error) {
                             console.error("Erreur Backend :", error);
-                            alert("⚠️ Impossible de joindre le Serveur Backend.\nPassage en mode Démonstration.");
+                            setErrorMsg("⚠️ Impossible de joindre le Serveur Backend. Passage en mode Démonstration.");
                             fetchedJobs = mockSearch(targetPage, currentHomeLatLng);
                         }
                     } else {
@@ -286,6 +336,7 @@
                     setSelectedJob(null);
                     setHasSearched(true);
                     setShowFilters(false);
+                    setIsSearchExpanded(false);
                 } finally {
                     setIsSearching(false);
                 }
@@ -297,7 +348,8 @@
                 return MOCK_JOBS.filter(job => 
                     (job.intitule.toLowerCase().includes(searchQuery.toLowerCase()) || (job.description && job.description.toLowerCase().includes(searchQuery.toLowerCase()))) &&
                     (filterContract === '' || job.typeContrat.includes(filterContract)) &&
-                    (!filterRemote || job.teletravailPossible === true)
+                    (!filterRemote || job.teletravailPossible === true) &&
+                    (filterSource === '' || job.source === filterSource)
                 );
             };
 
@@ -340,7 +392,7 @@
                         const isSelected = selectedJob?.id === job.id;
                         const isFav = favoriteJobs.some(f => f.id === job.id);
                         
-                        const icon = createCustomIcon(isSelected ? 'selected' : (isFav ? 'favorite' : 'exact'), isSelected);
+                        const icon = createCustomIcon(isSelected ? 'selected' : (isFav ? 'favorite' : 'exact'), job.source, isSelected);
                         const marker = window.L.marker(latLng, { icon }).addTo(mapInstanceRef.current);
                         
                         marker.on('click', () => { setSelectedJob(job); setDetailedJob(job); });
@@ -380,108 +432,158 @@
                     {/* --- CARTE (Fond) --- */}
                     <div ref={mapRef} className="absolute inset-0 z-0" />
 
-                    {/* --- HEADER PETITS BOUTONS TOP-RIGHT --- */}
-                    <div className="absolute top-4 right-4 z-[1000] flex gap-2">
-                        <button onClick={() => {setViewMode('favorites'); setHasSearched(true);}} className={`w-10 h-10 md:w-auto md:px-4 rounded-full shadow-lg font-bold transition flex items-center justify-center gap-2 ${viewMode === 'favorites' ? 'bg-pink-500 text-white' : 'glass-panel text-gray-700 hover:bg-gray-50'}`}>
-                            <i className="fas fa-heart"></i> <span className="hidden md:inline">Favoris ({favoriteJobs.length})</span>
-                        </button>
-                        <button onClick={() => setShowSettings(true)} className="w-10 h-10 rounded-full shadow-lg glass-panel text-gray-700 hover:text-blue-600 transition flex items-center justify-center">
-                            <i className="fas fa-cog"></i>
-                        </button>
-                    </div>
-
-                    {/* --- BARRE DE RECHERCHE MODERNE (Glassmorphism Pill) --- */}
-                    <div className={`absolute z-[1000] transition-all duration-500 ease-in-out flex justify-center w-full px-3 md:px-0 md:w-auto md:left-1/2 transform md:-translate-x-1/2
-                        ${hasSearched 
-                            ? 'top-4' 
-                            : 'top-1/3 md:top-1/2 md:-translate-y-1/2'}`}>
-                        
-                        <div className={`glass-panel shadow-2xl transition-all duration-300 ${hasSearched ? 'rounded-2xl md:rounded-full w-full md:w-[600px] lg:w-[700px]' : 'rounded-3xl md:rounded-full w-full max-w-2xl'}`}>
-                            
-                            {/* Inputs Row */}
-                            <div className="flex flex-col md:flex-row md:items-center p-2 gap-2 md:gap-0">
-                                <div className="flex flex-1 items-center px-3 py-2 md:py-1">
-                                    <i className="fas fa-search text-gray-400 mr-3"></i>
-                                    <input type="text" placeholder="Métier, mots-clés..." className="w-full bg-transparent text-sm font-medium focus:outline-none text-gray-800 placeholder-gray-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
-                                </div>
-                                
-                                <div className="hidden md:block w-px h-8 bg-gray-300 mx-2"></div>
-                                <div className="md:hidden h-px w-full bg-gray-200 my-1"></div>
-
-                                <div className="relative flex flex-1 items-center px-3 py-2 md:py-1" ref={suggestionBoxRef}>
-                                    <i className="fas fa-map-marker-alt text-blue-500 mr-3"></i>
-                                    <input type="text" placeholder="Domicile (Ville...)" className="w-full bg-transparent text-sm font-medium focus:outline-none text-gray-800 placeholder-gray-500" value={addressQuery} onChange={(e) => { setAddressQuery(e.target.value); setIsSuggesting(true); if (homeLatLng) setHomeLatLng(null); }} onFocus={() => setIsSuggesting(true)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
-                                    
-                                    {isSuggesting && addressSuggestions.length > 0 && (
-                                        <div className="absolute top-full left-0 right-0 mt-3 glass-panel rounded-xl shadow-xl border border-white overflow-hidden z-[1001]">
-                                            {addressSuggestions.map((feature) => (
-                                                <div key={feature.properties.id} className="px-4 py-3 hover:bg-blue-50/50 cursor-pointer text-sm border-b border-gray-100 flex items-center gap-3" onClick={() => handleSelectAddress(feature)}>
-                                                    <i className="fas fa-map-pin text-gray-400"></i><span className="truncate font-medium">{feature.properties.label}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex gap-2 px-2 pb-1 md:pb-0 md:px-0">
-                                    <button onClick={() => setShowFilters(!showFilters)} className={`flex-1 md:flex-none p-3 md:p-2.5 rounded-xl md:rounded-full transition flex items-center justify-center relative ${showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 md:bg-transparent text-gray-600 hover:bg-gray-100'}`}>
-                                        <i className="fas fa-sliders-h"></i>
-                                        {(filterContract || filterRemote || maxDuration !== 45) && !showFilters && <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>}
-                                    </button>
-                                    <button onClick={() => { setViewMode('search'); handleSearch(false); }} className="flex-[2] md:flex-none bg-blue-600 hover:bg-blue-700 text-white rounded-xl md:rounded-full px-6 py-3 md:py-2.5 text-sm font-bold shadow-md transition flex items-center justify-center" disabled={isSearching}>
-                                        {isSearching ? <i className="fas fa-circle-notch fa-spin"></i> : <span className="md:hidden">Rechercher</span>}
-                                        <i className="fas fa-arrow-right hidden md:block"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* FILTRES DÉROULANTS */}
-                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="p-4 md:px-6 md:pb-6 border-t border-gray-200/50 space-y-5">
-                                    
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Contrat</label>
-                                            <select value={filterContract} onChange={(e) => setFilterContract(e.target.value)} className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-blue-500">
-                                                <option value="">Tous</option><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="ALT">Alternance</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Expérience</label>
-                                            <select value={filterExperience} onChange={(e) => setFilterExperience(e.target.value)} className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-blue-500">
-                                                <option value="">Toutes</option><option value="1">Débutant</option><option value="2">1 à 3 ans</option><option value="3">+ 3 ans</option>
-                                            </select>
-                                        </div>
-                                        <div className="col-span-2 md:col-span-1 flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 mt-0 md:mt-[18px]">
-                                            <span className="text-sm font-semibold text-gray-700"><i className="fas fa-house-user text-green-600 mr-2"></i>Télétravail</span>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" className="sr-only peer" checked={filterRemote} onChange={(e) => setFilterRemote(e.target.checked)}/>
-                                                <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
-                                            </label>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <label className="text-xs font-bold text-blue-900 uppercase tracking-wider"><i className="fas fa-route mr-1"></i> Trajet Local Max</label>
-                                            <span className="text-sm font-black text-blue-700">{maxDuration === 120 ? 'Illimité' : formatTime(maxDuration)}</span>
-                                        </div>
-                                        <input type="range" min="10" max="120" step="5" value={maxDuration} onChange={(e) => setMaxDuration(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"/>
-                                        
-                                        <div className="flex gap-2 mt-4">
-                                            <button onClick={() => setTransportMode('driving')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'driving' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-car mr-1"></i> Auto</button>
-                                            <button onClick={() => setTransportMode('transit')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'transit' ? 'bg-purple-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-bus mr-1"></i> Transit</button>
-                                            <button onClick={() => setTransportMode('cycling')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'cycling' ? 'bg-green-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-bicycle mr-1"></i> Vélo</button>
-                                        </div>
-                                    </div>
-
-                                </div>
+                    {/* --- TOAST D'ERREUR --- */}
+                    {errorMsg && (
+                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-[5000] w-[90%] max-w-md">
+                            <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl shadow-lg flex items-start gap-3 fade-in-down">
+                                <i className="fas fa-exclamation-circle text-red-500 mt-0.5"></i>
+                                <p className="text-sm text-red-800 font-medium flex-1">{errorMsg}</p>
+                                <button onClick={() => setErrorMsg(null)} className="text-red-400 hover:text-red-600"><i className="fas fa-times"></i></button>
                             </div>
                         </div>
-                    </div>
                     )}
 
-                    {/* --- LISTE DES OFFRES (BOTTOM SHEET SUR MOBILE, SIDEBAR SUR DESKTOP) --- */}
+                    {/* --- HEADER PETITS BOUTONS TOP-RIGHT --- */}
+                    {(!isMobile || !hasSearched || !isSearchExpanded) && (
+                        <div className="absolute top-4 right-4 z-[1000] flex gap-2">
+                            <button onClick={() => {setViewMode('favorites'); setHasSearched(true); setIsSearchExpanded(false);}} className={`w-10 h-10 md:w-auto md:px-4 rounded-full shadow-lg font-bold transition flex items-center justify-center gap-2 ${viewMode === 'favorites' ? 'bg-pink-500 text-white' : 'glass-panel text-gray-700 hover:bg-gray-50'}`}>
+                                <i className="fas fa-heart"></i> <span className="hidden md:inline">Favoris ({favoriteJobs.length})</span>
+                            </button>
+                            <button onClick={() => setShowSettings(true)} className="w-10 h-10 rounded-full shadow-lg glass-panel text-gray-700 hover:text-blue-600 transition flex items-center justify-center">
+                                <i className="fas fa-cog"></i>
+                            </button>
+                        </div>
+                    )}
+
+                    {/* --- BARRE DE RECHERCHE MODERNE (Glassmorphism Pill) --- */}
+                    <div className={`absolute z-[1000] transition-all duration-500 ease-in-out flex justify-center px-3 md:px-0 md:w-auto md:left-1/2 transform md:-translate-x-1/2
+                        ${hasSearched 
+                            ? 'top-4 w-full md:w-auto' 
+                            : 'top-1/3 md:top-1/2 md:-translate-y-1/2 w-full'}`}>
+                        
+                        {isMobile && hasSearched && !isSearchExpanded ? (
+                            <div className="w-full flex">
+                                <div 
+                                    className="glass-panel shadow-md rounded-full px-4 py-2.5 flex items-center justify-between gap-3 text-sm font-medium text-gray-700 cursor-pointer border border-gray-200 flex-1 mr-[100px]"
+                                    onClick={() => setIsSearchExpanded(true)}
+                                >
+                                    <div className="flex items-center gap-2 truncate">
+                                        <i className="fas fa-search text-blue-500 w-3 text-center"></i>
+                                        <span className="truncate max-w-[90px]">{searchQuery || 'Toutes offres'}</span>
+                                        <span className="text-gray-300">|</span>
+                                        <i className="fas fa-map-marker-alt text-green-600 w-3 text-center"></i>
+                                        <span className="truncate max-w-[90px]">{addressQuery || 'Partout'}</span>
+                                    </div>
+                                    <div className="bg-gray-100 rounded-full w-7 h-7 flex items-center justify-center shrink-0">
+                                        <i className="fas fa-pen text-gray-500 text-[10px]"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className={`glass-panel shadow-2xl transition-all duration-300 ${hasSearched ? 'rounded-2xl md:rounded-full w-full md:w-[600px] lg:w-[700px]' : 'rounded-3xl md:rounded-full w-full max-w-2xl'}`}>
+                                
+                                {/* Header Mobile Expanded */}
+                                {isMobile && hasSearched && isSearchExpanded && (
+                                    <div className="flex justify-between items-center px-4 pt-3 pb-1 border-b border-gray-100/50">
+                                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Modifier la recherche</span>
+                                        <button onClick={() => {setIsSearchExpanded(false); setShowFilters(false);}} className="text-gray-400 hover:text-gray-600 p-1">
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Inputs Row */}
+                                <div className="flex flex-col md:flex-row md:items-center p-2 gap-2 md:gap-0">
+                                    <div className="flex flex-1 items-center px-3 py-2 md:py-1">
+                                        <i className="fas fa-search text-gray-400 mr-3"></i>
+                                        <input type="text" placeholder="Métier, mots-clés..." className="w-full bg-transparent text-sm font-medium focus:outline-none text-gray-800 placeholder-gray-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
+                                    </div>
+                                    
+                                    <div className="hidden md:block w-px h-8 bg-gray-300 mx-2"></div>
+                                    <div className="md:hidden h-px w-full bg-gray-200 my-1"></div>
+
+                                    <div className="relative flex flex-1 items-center px-3 py-2 md:py-1" ref={suggestionBoxRef}>
+                                        <i className="fas fa-map-marker-alt text-blue-500 mr-3"></i>
+                                        <input type="text" placeholder="Domicile (Ville...)" className="w-full bg-transparent text-sm font-medium focus:outline-none text-gray-800 placeholder-gray-500" value={addressQuery} onChange={(e) => { setAddressQuery(e.target.value); setIsSuggesting(true); if (homeLatLng) setHomeLatLng(null); }} onFocus={() => setIsSuggesting(true)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}/>
+                                        
+                                        {isSuggesting && addressSuggestions.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-3 glass-panel rounded-xl shadow-xl border border-white overflow-hidden z-[1001]">
+                                                {addressSuggestions.map((feature) => (
+                                                    <div key={feature.properties.id} className="px-4 py-3 hover:bg-blue-50/50 cursor-pointer text-sm border-b border-gray-100 flex items-center gap-3" onClick={() => handleSelectAddress(feature)}>
+                                                        <i className="fas fa-map-pin text-gray-400"></i><span className="truncate font-medium">{feature.properties.label}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex gap-2 px-2 pb-1 md:pb-0 md:px-0">
+                                        <button onClick={() => setShowFilters(!showFilters)} className={`flex-1 md:flex-none p-3 md:p-2.5 rounded-xl md:rounded-full transition flex items-center justify-center relative ${showFilters ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 md:bg-transparent text-gray-600 hover:bg-gray-100'}`}>
+                                            <i className="fas fa-sliders-h"></i>
+                                            {(filterContract || filterRemote || filterSource || maxDuration !== 45) && !showFilters && <span className="absolute top-1 right-1 w-2 h-2 bg-blue-500 rounded-full"></span>}
+                                        </button>
+                                        <button onClick={() => { setViewMode('search'); handleSearch(false); }} className="flex-[2] md:flex-none bg-blue-600 hover:bg-blue-700 text-white rounded-xl md:rounded-full px-6 py-3 md:py-2.5 text-sm font-bold shadow-md transition flex items-center justify-center" disabled={isSearching}>
+                                            {isSearching ? <i className="fas fa-circle-notch fa-spin"></i> : <span className="md:hidden">Rechercher</span>}
+                                            <i className="fas fa-arrow-right hidden md:block"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* FILTRES DÉROULANTS */}
+                                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showFilters ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="p-4 md:px-6 md:pb-6 border-t border-gray-200/50 space-y-5">
+                                        
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Source</label>
+                                                <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">Toutes sources</option>
+                                                    <option value="France Travail">France Travail</option>
+                                                    <option value="Jobijoba">Jobijoba (RSS)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Contrat</label>
+                                                <select value={filterContract} onChange={(e) => setFilterContract(e.target.value)} className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">Tous</option><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="ALT">Alternance</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Expérience</label>
+                                                <select value={filterExperience} onChange={(e) => setFilterExperience(e.target.value)} className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="">Toutes</option><option value="1">Débutant</option><option value="2">1 à 3 ans</option><option value="3">+ 3 ans</option>
+                                                </select>
+                                            </div>
+                                            <div className="col-span-2 md:col-span-1 flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl border border-gray-200 mt-0 md:mt-[18px]">
+                                                <span className="text-sm font-semibold text-gray-700"><i className="fas fa-house-user text-green-600 mr-2"></i>Télétravail</span>
+                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                    <input type="checkbox" className="sr-only peer" checked={filterRemote} onChange={(e) => setFilterRemote(e.target.checked)}/>
+                                                    <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <label className="text-xs font-bold text-blue-900 uppercase tracking-wider"><i className="fas fa-route mr-1"></i> Trajet Local Max</label>
+                                                <span className="text-sm font-black text-blue-700">{maxDuration === 120 ? 'Illimité' : formatTime(maxDuration)}</span>
+                                            </div>
+                                            <input type="range" min="10" max="120" step="5" value={maxDuration} onChange={(e) => setMaxDuration(parseInt(e.target.value))} disabled={!addressQuery} className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 disabled:opacity-50"/>
+                                            
+                                            <div className="flex gap-2 mt-4">
+                                                <button onClick={() => setTransportMode('driving')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'driving' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-car mr-1"></i> Auto</button>
+                                                <button onClick={() => setTransportMode('transit')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'transit' ? 'bg-purple-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-bus mr-1"></i> Transit</button>
+                                                <button onClick={() => setTransportMode('cycling')} className={`flex-1 py-1.5 text-xs rounded-xl font-bold transition ${transportMode === 'cycling' ? 'bg-green-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200'}`}><i className="fas fa-bicycle mr-1"></i> Vélo</button>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* --- LISTE DES OFFRES --- */}
                     <div className={`absolute z-[990] transition-all duration-500 ease-in-out glass-panel shadow-[0_-10px_40px_rgba(0,0,0,0.1)] border border-gray-200
                         md:w-[420px] md:rounded-3xl md:left-4 md:bottom-4
                         ${isMobile ? 'bottom-0 left-0 w-full rounded-t-3xl' : ''}
@@ -491,12 +593,17 @@
                         `}
                         style={{ height: isMobile && (hasSearched || viewMode === 'favorites') ? '45vh' : undefined }}
                     >
-                        {/* Drag indicator (Mobile only) */}
                         <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto my-3 md:hidden"></div>
 
                         <div className="px-5 pb-3 pt-1 md:pt-5 border-b border-gray-200/50 flex items-center justify-between">
                             <span className="text-base text-gray-900 font-black tracking-tight">{displayJobs.length} {viewMode === 'favorites' ? 'Favoris' : 'Offres'}</span>
-                            <select className="text-xs font-bold bg-gray-100 border-none rounded-lg py-1.5 px-3 text-gray-700 outline-none cursor-pointer" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                            <select className="text-xs font-bold bg-gray-100 border-none rounded-lg py-1.5 px-3 text-gray-700 outline-none cursor-pointer" value={sortBy} onChange={(e) => {
+                                if (e.target.value === 'duration' && !homeLatLng) {
+                                    setErrorMsg("Veuillez renseigner votre domicile pour trier par durée de trajet.");
+                                    return;
+                                }
+                                setSortBy(e.target.value);
+                            }}>
                                 <option value="duration">Plus rapide</option>
                                 <option value="date">Plus récent</option>
                             </select>
@@ -514,6 +621,8 @@
                                     const estDur = route ? getCalculatedDuration(route.distanceKm, route.osrmDurationMin, transportMode) : null;
                                     const isFav = favoriteJobs.some(f => f.id === job.id);
                                     const isSel = selectedJob?.id === job.id;
+                                    
+                                    const sourceConfig = getSourceConfig(job.source || 'France Travail');
 
                                     return (
                                         <div key={job.id} onClick={() => { setSelectedJob(job); setDetailedJob(job); }} 
@@ -524,9 +633,12 @@
                                                     <i className={`${isFav ? 'fas text-pink-500' : 'far text-gray-300 hover:text-pink-300'} fa-heart`}></i>
                                                 </button>
                                             </div>
-                                            <p className="text-xs text-gray-500 font-semibold mb-3 truncate"><i className="far fa-building mr-1"></i> {job.entreprise?.nom || 'Confidentiel'}</p>
+                                            <p className="text-xs text-gray-500 font-semibold mb-2 truncate"><i className="far fa-building mr-1"></i> {job.entreprise?.nom || 'Confidentiel'}</p>
                                             
                                             <div className="flex flex-wrap gap-1.5 mb-3">
+                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${sourceConfig.colorClass}`}>
+                                                    <i className={sourceConfig.icon}></i> {job.source || 'France Travail'}
+                                                </span>
                                                 <span className="bg-gray-100 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-md">{job.typeContrat || 'CDI'}</span>
                                                 {job.teletravailPossible && <span className="bg-green-50 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-md"><i className="fas fa-house-user"></i> Télétravail</span>}
                                             </div>
@@ -557,11 +669,12 @@
                         <div className="fixed inset-0 z-[3000] flex md:justify-end items-end md:items-stretch bg-black/40 backdrop-blur-sm transition-opacity">
                             <div className={`bg-white w-full md:w-[500px] h-[85vh] md:h-full shadow-2xl flex flex-col ${isMobile ? 'rounded-t-3xl slide-in-bottom' : 'slide-in-right'}`}>
                                 
-                                {/* Header Detail */}
                                 <div className="p-5 md:p-6 border-b border-gray-100 bg-white flex justify-between items-start sticky top-0 z-10 md:rounded-none rounded-t-3xl">
                                     <div className="flex-1 pr-4">
                                         <div className="flex items-center gap-2 mb-2">
-                                            <span className="bg-blue-100 text-blue-800 text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider">{detailedJob.typeContrat}</span>
+                                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider border ${getSourceConfig(detailedJob.source || 'France Travail').colorClass}`}>
+                                                <i className={getSourceConfig(detailedJob.source || 'France Travail').icon}></i> {detailedJob.source || 'France Travail'}
+                                            </span>
                                             <span className="text-[10px] font-bold text-gray-400 uppercase"><i className="far fa-calendar-alt"></i> {new Date(detailedJob.dateCreation).toLocaleDateString('fr-FR')}</span>
                                         </div>
                                         <h2 className="text-xl font-black text-gray-900 leading-tight mb-1">{detailedJob.intitule}</h2>
@@ -577,24 +690,20 @@
                                     </div>
                                 </div>
 
-                                {/* Body Detail */}
                                 <div className="p-5 md:p-6 overflow-y-auto flex-1 space-y-6 bg-gray-50">
                                     
-                                    {/* Grille Infos Clés */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100"><i className="fas fa-map-marker-alt text-blue-500 text-lg mb-1 block"></i><p className="text-[10px] text-gray-500 font-bold uppercase">Lieu</p><p className="text-sm font-bold text-gray-800 truncate">{detailedJob.lieuTravail?.libelle}</p></div>
                                         <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100"><i className="fas fa-euro-sign text-green-500 text-lg mb-1 block"></i><p className="text-[10px] text-gray-500 font-bold uppercase">Salaire</p><p className="text-sm font-bold text-gray-800 truncate">{detailedJob.salaire?.libelle || 'Non précisé'}</p></div>
                                         <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100"><i className="fas fa-graduation-cap text-purple-500 text-lg mb-1 block"></i><p className="text-[10px] text-gray-500 font-bold uppercase">Expérience</p><p className="text-sm font-bold text-gray-800 truncate">{detailedJob.experienceLibelle || 'Non précisée'}</p></div>
-                                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100"><i className="fas fa-briefcase text-orange-500 text-lg mb-1 block"></i><p className="text-[10px] text-gray-500 font-bold uppercase">Secteur</p><p className="text-sm font-bold text-gray-800 truncate">{detailedJob.secteurActivite || 'Non précisé'}</p></div>
+                                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-gray-100"><i className="fas fa-file-contract text-orange-500 text-lg mb-1 block"></i><p className="text-[10px] text-gray-500 font-bold uppercase">Contrat</p><p className="text-sm font-bold text-gray-800 truncate">{detailedJob.typeContrat || 'Non précisé'}</p></div>
                                     </div>
 
-                                    {/* Description */}
                                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                         <h3 className="text-sm font-black text-gray-800 mb-3 uppercase tracking-wide"><i className="fas fa-align-left text-gray-400 mr-2"></i>Le Poste</h3>
                                         <p className="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">{detailedJob.description}</p>
                                     </div>
 
-                                    {/* Compétences */}
                                     {detailedJob.competences && detailedJob.competences.length > 0 && (
                                     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
                                         <h3 className="text-sm font-black text-gray-800 mb-3 uppercase tracking-wide"><i className="fas fa-tools text-gray-400 mr-2"></i>Compétences</h3>
@@ -606,12 +715,31 @@
                                     </div>
                                     )}
 
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-800 mb-3 border-b pb-2"><i className="fas fa-info-circle text-gray-400 mr-2"></i>L'Entreprise</h3>
+                                        {detailedJob.entreprise?.description && <p className="text-sm text-gray-600 italic mb-4">"{detailedJob.entreprise.description}"</p>}
+                                        
+                                        {detailedJob.contact ? (
+                                            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                                <p className="text-sm font-bold text-gray-800 mb-1">Contact Recrutement</p>
+                                                <p className="text-sm text-gray-600">{detailedJob.contact.nom || 'Service RH'}</p>
+                                                {detailedJob.contact.coordonnees1 && <p className="text-sm text-blue-600 mt-1">{detailedJob.contact.coordonnees1}</p>}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-gray-500">Postulez directement via la plateforme partenaire.</p>
+                                        )}
+                                    </div>
                                 </div>
 
-                                {/* Footer Detail */}
                                 <div className="p-4 md:p-6 border-t border-gray-100 bg-white">
-                                    <button onClick={() => window.open(`https://candidat.francetravail.fr/offres/recherche/detail/${detailedJob.id}`, '_blank')} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 md:py-3 rounded-xl shadow-lg transition flex justify-center items-center gap-2">
-                                        Voir l'offre officielle <i className="fas fa-external-link-alt text-sm opacity-70"></i>
+                                    <button onClick={() => {
+                                        if(detailedJob.url) {
+                                            window.open(detailedJob.url, '_blank');
+                                        } else {
+                                            window.open(`https://candidat.francetravail.fr/offres/recherche/detail/${detailedJob.id}`, '_blank');
+                                        }
+                                    }} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 md:py-3 rounded-xl shadow-lg transition flex justify-center items-center gap-2">
+                                        Voir l'offre sur {detailedJob.source || 'France Travail'} <i className="fas fa-external-link-alt text-sm opacity-70"></i>
                                     </button>
                                 </div>
 
@@ -619,26 +747,60 @@
                         </div>
                     )}
 
-                    {/* --- MODAL PARAMÈTRES --- */}
+                    {/* --- MODAL PARAMÈTRES ET DIAGNOSTIC --- */}
                     {showSettings && (
                         <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden slide-in-bottom">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden slide-in-bottom">
                                 <div className="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
-                                    <h2 className="font-black text-gray-800 text-lg">Réglages</h2>
+                                    <h2 className="font-black text-gray-800 text-lg"><i className="fas fa-server mr-2 text-blue-500"></i> Serveur & API</h2>
                                     <button onClick={() => setShowSettings(false)} className="text-gray-400 hover:text-gray-700 bg-gray-100 w-8 h-8 rounded-full flex items-center justify-center"><i className="fas fa-times"></i></button>
                                 </div>
-                                <div className="p-6 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm font-bold text-gray-800">Mode Connecté (API)</span>
+                                <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                                    
+                                    <div className="flex items-center justify-between bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                                        <span className="text-sm font-bold text-blue-900">Activer le Serveur Réel</span>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" className="sr-only peer" checked={useRealApi} onChange={(e) => setUseRealApi(e.target.checked)}/>
                                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </div>
-                                    <p className="text-[11px] font-semibold text-gray-500 leading-tight">Si activé, interroge le Backend Render. Sinon, utilise les données factices de démonstration.</p>
+                                    
+                                    <div className={`space-y-4 transition-opacity ${!useRealApi ? 'opacity-40 pointer-events-none' : ''}`}>
+                                        
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">URL du Serveur Backend (Render)</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full text-sm bg-gray-50 border border-gray-200 rounded-xl py-3 px-3 outline-none focus:border-blue-500 font-mono shadow-inner" 
+                                                value={backendUrl} 
+                                                onChange={(e) => setBackendUrl(e.target.value)} 
+                                                placeholder="https://votre-serveur.onrender.com/api/jobs"
+                                            />
+                                        </div>
+
+                                        <div className="border border-indigo-100 bg-indigo-50/50 rounded-2xl p-4">
+                                            <h3 className="text-sm font-bold text-indigo-900 mb-1"><i className="fas fa-stethoscope mr-1"></i> Outil de Diagnostic</h3>
+                                            <p className="text-xs text-indigo-700/80 mb-3">Testez la connexion avec votre serveur Render (peut prendre 1 min si le serveur sort de veille).</p>
+                                            
+                                            <button onClick={testBackendConnection} disabled={isTestingBackend || !backendUrl} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2.5 rounded-xl shadow transition disabled:opacity-50">
+                                                {isTestingBackend ? 'Test en cours...' : 'Lancer le test de connexion'}
+                                            </button>
+
+                                            {backendTestResult && (
+                                                <div className="mt-3 p-3 bg-white border border-indigo-100 rounded-xl text-xs text-gray-700" dangerouslySetInnerHTML={{__html: backendTestResult}}></div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-green-50 p-4 rounded-2xl border border-green-200">
+                                            <h4 className="text-xs font-bold text-green-800 mb-1"><i className="fas fa-shield-alt mr-1"></i> Sécurité Active</h4>
+                                            <p className="text-[11px] text-green-700/80">Vos identifiants France Travail sont configurés en sécurité sur le serveur. Ils n'apparaissent jamais ici.</p>
+                                        </div>
+
+                                    </div>
                                 </div>
-                                <div className="p-4 bg-gray-50 border-t border-gray-100">
-                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); setShowSettings(false); }} className="w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-bold shadow-md">Enregistrer</button>
+                                <div className="p-5 bg-gray-50 border-t border-gray-100 flex gap-3">
+                                    <button onClick={() => setShowSettings(false)} className="flex-1 bg-white text-gray-600 border border-gray-200 py-3 rounded-xl text-sm font-bold hover:bg-gray-100 transition">Annuler</button>
+                                    <button onClick={() => { localStorage.setItem('ft_use_real', useRealApi); localStorage.setItem('ft_backend_url', backendUrl); setShowSettings(false); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-bold shadow-md hover:bg-blue-700 transition">Enregistrer</button>
                                 </div>
                             </div>
                         </div>
